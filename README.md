@@ -1,6 +1,8 @@
-# Financial Dashboard Application
+# Tally Prime 6.0 Web Extension – Financial Dashboard Application
 
-A comprehensive financial dashboard application built with React.js and TypeScript, designed for Tally integration and financial data management.
+This project is an **extended web version of Tally Prime 6.0**, bringing powerful business management tools to your browser. It enables seamless access to Tally data and features from anywhere, leveraging Tally’s XML API for real-time financial insights, analytics, and business operations management.
+
+Built with React.js and TypeScript, this dashboard integrates with your existing Tally server, providing modules for sales, purchases, inventory, ledgers, and more—all accessible via a modern web interface.
 
 ## Project Structure
 
@@ -50,11 +52,37 @@ src/
 ### Prerequisites
 - Node.js (v16 or higher)
 - npm or yarn
+- Access to a running Tally Prime 6.0 server (with Tally XML API enabled)
 
 ### Installation
 ```bash
 npm install
 ```
+
+### Tally Server Configuration (IMPORTANT)
+To connect the dashboard to your Tally server, you **must configure the Tally server URL in `vite.config.ts`** before running the app. This enables the reverse proxy for API requests.
+
+#### How to Set the Tally Server URL
+1. Open `vite.config.ts` in the project root.
+2. Locate the `server.proxy` section:
+   ```js
+   server: {
+     proxy: {
+       '/api/tally': {
+         target: 'http://<YOUR_TALLY_SERVER_IP>:<PORT>',
+         changeOrigin: true,
+         rewrite: (path) => path.replace(/^\/api\/tally/, ''),
+         timeout: 120000,
+         proxyTimeout: 120000,
+       }
+     }
+   }
+   ```
+3. Replace `http://192.168.31.119:9000` with your actual Tally server’s IP and port.
+   - Example: `target: 'http://192.168.1.100:9000'`
+4. Save the file.
+
+> **Note:** The app will not work unless the Tally server URL is correctly set and the Tally server is running with XML API enabled.
 
 ### Development
 ```bash
@@ -66,7 +94,7 @@ npm run dev
 npm run build
 ```
 
-## Architecture
+## Architecture & Integration
 
 ### Modular Design
 Each module is self-contained with its own components, logic, and routing. This makes the application:
@@ -84,7 +112,12 @@ Each module is self-contained with its own components, logic, and routing. This 
 - **Local State**: Component-specific state
 - **Custom Hooks**: Reusable state logic
 
-## Customization
+### Tally Integration
+- **Reverse Proxy**: All requests to `/api/tally` are proxied to your Tally server using the configuration in `vite.config.ts`.
+- **XML API**: The app communicates with Tally using its XML API for fetching and managing business data.
+- **Security**: Ensure your Tally server is accessible only to trusted clients and the API is properly secured.
+
+## Customization & Extensibility
 
 ### Adding New Modules
 1. Create a new folder in `src/modules/`
@@ -99,9 +132,9 @@ Each module is self-contained with its own components, logic, and routing. This 
 - **Component Variants**: Reusable style patterns
 
 ### Data Integration
-- **Dummy Data**: Currently uses mock data
-- **API Ready**: Structure prepared for API integration
-- **Tally Integration**: Designed for Tally XML API
+- **Live Tally Data**: Connects directly to your Tally server for real business data
+- **API Ready**: Easily extend to other APIs or data sources
+- **Tally XML API**: Designed for robust Tally integration
 
 ## Documentation
 
@@ -112,6 +145,7 @@ Each module is self-contained with its own components, logic, and routing. This 
 - [Shared Components](./shared/components.md)
 - [API Integration](./api-integration.md)
 - [Customization Guide](./customization.md)
+- [Tally Integration](https://help.tallysolutions.com/tally-prime/xml-interface/)
 
 ## Contributing
 
@@ -120,6 +154,7 @@ Each module is self-contained with its own components, logic, and routing. This 
 3. Write comprehensive documentation
 4. Test components thoroughly
 5. Follow naming conventions
+6. Ensure Tally server configuration is documented for new contributors
 
 ## License
 
