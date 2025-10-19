@@ -71,7 +71,7 @@ export const SalesComparison: React.FC<SalesComparisonProps> = ({
     formatter?: (val: number | string) => string;
     icon: React.ComponentType<any>;
   }) => (
-    <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 hover:shadow-2xl transition-shadow duration-300">
+    <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-6 hover:shadow-2xl hover:border-blue-400 hover:scale-105 transition-all duration-300 cursor-pointer">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wider">{title}</h3>
         <div className="p-2 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-lg">
@@ -183,7 +183,7 @@ export const SalesComparison: React.FC<SalesComparisonProps> = ({
       </div>
 
       {/* Detailed Comparison */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8">
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8 hover:shadow-2xl hover:border-indigo-300 transition-all duration-300">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">Detailed Analysis</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -244,7 +244,7 @@ export const SalesComparison: React.FC<SalesComparisonProps> = ({
       </div>
 
       {/* Performance Summary */}
-      <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl border border-purple-200 p-8">
+      <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl border border-purple-200 p-8 hover:shadow-2xl hover:from-purple-100 hover:to-pink-100 hover:border-purple-400 transition-all duration-300">
         <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">Performance Summary</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">

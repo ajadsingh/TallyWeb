@@ -62,29 +62,31 @@ const SalesOverview: React.FC<SalesOverviewProps> = ({
     <div className="space-y-6">
       {/* Date Range Selector */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-6">
-        <div className="flex flex-wrap items-center gap-4 mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">Date Range:</h3>
-          
-          {/* Quick Date Range Buttons */}
-          <div className="flex flex-wrap gap-2">
-            {dateRangeOptions.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => handleDateRangeChange(option.value)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  selectedDateRange === option.value
-                    ? 'bg-blue-500 text-white shadow-md transform scale-105'
-                    : 'bg-white text-gray-700 hover:bg-blue-100 border border-gray-200'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <h3 className="text-lg font-semibold text-gray-800">Date Range:</h3>
+            
+            {/* Quick Date Range Buttons */}
+            <div className="flex flex-wrap gap-2">
+              {dateRangeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => handleDateRangeChange(option.value)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    selectedDateRange === option.value
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'bg-white text-gray-700 hover:bg-blue-100 border border-gray-200'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
           
           <button
             onClick={() => onDateRangeChange(selectedDateRange)}
-            className="ml-auto px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors flex items-center space-x-2 shadow-md"
+            className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors flex items-center justify-center space-x-2 shadow-md self-start sm:self-auto"
           >
             <RefreshCw className="h-4 w-4" />
             <span>Refresh</span>
@@ -126,7 +128,7 @@ const SalesOverview: React.FC<SalesOverviewProps> = ({
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl p-6 shadow-lg">
+        <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl p-6 shadow-lg hover:shadow-2xl hover:from-emerald-600 hover:to-emerald-700 hover:scale-105 transition-all duration-300 cursor-pointer">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-emerald-100 text-sm font-medium">Total Sales</p>
@@ -139,7 +141,7 @@ const SalesOverview: React.FC<SalesOverviewProps> = ({
           </div>
         </div>
 
-        <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl p-6 shadow-lg">
+        <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl p-6 shadow-lg hover:shadow-2xl hover:from-indigo-600 hover:to-indigo-700 hover:scale-105 transition-all duration-300 cursor-pointer">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-indigo-100 text-sm font-medium">Total Orders</p>
@@ -154,7 +156,7 @@ const SalesOverview: React.FC<SalesOverviewProps> = ({
       </div>
 
       {/* Sales Table */}
-      <div className="bg-white rounded-xl shadow-lg border border-gray-200">
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200 hover:shadow-2xl hover:border-blue-300 transition-all duration-300">
         <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-gray-100">
           <h2 className="text-xl font-semibold text-gray-800">Sales</h2>
           <p className="text-sm text-gray-600 mt-1">All sales transactions for {currentRangeLabel.toLowerCase()}</p>
@@ -187,7 +189,7 @@ const SalesOverview: React.FC<SalesOverviewProps> = ({
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {salesVouchers.map((voucher, index) => (
-                  <tr key={voucher.id} className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
+                  <tr key={voucher.id} className={`hover:bg-blue-50 hover:shadow-sm transition-all duration-200 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <div className="flex items-center">
                         <Calendar className="h-4 w-4 text-gray-400 mr-2" />

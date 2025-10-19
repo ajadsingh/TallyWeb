@@ -1,34 +1,84 @@
-import React, { useState } from 'react';
-import { Search, Filter, Download, Eye } from 'lucide-react';
-import { useDashboardContext } from '../../../context/DashboardContext';
+import React, { useState, useMemo } from 'react';
+import { Search, Filter, Download, Eye, Loader } from 'lucide-react';
+import { PurchaseVoucher } from '../../../services/api/purchases/purchasesApiService';
 import { formatCurrency } from '../../../shared/utils/formatters';
 
-const PurchaseTransactions: React.FC = () => {
-  const { data } = useDashboardContext();
+interface PurchaseTransactionsProps {
+  currentPeriodVouchers: PurchaseVoucher[];
+  previousPeriodVouchers: PurchaseVoucher[];
+  currentPeriodLabel: string;
+  previousPeriodLabel: string;
+  loading: boolean;
+}
+
+const PurchaseTransactions: React.FC<PurchaseTransactionsProps> = ({
+  currentPeriodVouchers,
+  previousPeriodVouchers,
+  currentPeriodLabel,
+  previousPeriodLabel,
+  loading
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [periodFilter, setPeriodFilter] = useState<'current' | 'previous' | 'all'>('current');
 
-  const filteredTransactions = data.purchases.recentTransactions.filter(transaction => {
-    const matchesSearch = transaction.supplier.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || transaction.status.toLowerCase() === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  // Combine vouchers with period labels
+  const allTransactions = useMemo(() => {
+    const current = currentPeriodVouchers.map(v => ({ ...v, period: 'current' as const }));
+    const previous = previousPeriodVouchers.map(v => ({ ...v, period: 'previous' as const }));
+    
+    if (periodFilter === 'current') return current;
+    if (periodFilter === 'previous') return previous;
+    return [...current, ...previous].sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  }, [currentPeriodVouchers, previousPeriodVouchers, periodFilter]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Paid':
-        return 'bg-green-100 text-green-700';
-      case 'Pending':
-        return 'bg-amber-100 text-amber-700';
-      case 'Overdue':
-        return 'bg-red-100 text-red-700';
-      default:
-        return 'bg-gray-100 text-gray-700';
-    }
-  };
+  const filteredTransactions = allTransactions.filter(transaction =>
+    transaction.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    transaction.voucherNumber.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Calculate comparison metrics
+  const currentTotal = currentPeriodVouchers.reduce((sum, v) => sum + v.amount, 0);
+  const previousTotal = previousPeriodVouchers.reduce((sum, v) => sum + v.amount, 0);
+  const growth = previousTotal > 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : 0;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader className="w-8 h-8 animate-spin text-purple-500" />
+        <span className="ml-3 text-gray-600">Loading transaction data...</span>
+      </div>
+    );
+  }
+
+
 
   return (
     <div className="space-y-6">
+      {/* Comparison Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <h3 className="text-sm text-gray-600 mb-2">{currentPeriodLabel}</h3>
+          <p className="text-3xl font-bold text-purple-600">{formatCurrency(currentTotal)}</p>
+          <p className="text-sm text-gray-500 mt-1">{currentPeriodVouchers.length} transactions</p>
+        </div>
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <h3 className="text-sm text-gray-600 mb-2">{previousPeriodLabel}</h3>
+          <p className="text-3xl font-bold text-blue-600">{formatCurrency(previousTotal)}</p>
+          <p className="text-sm text-gray-500 mt-1">{previousPeriodVouchers.length} transactions</p>
+        </div>
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <h3 className="text-sm text-gray-600 mb-2">Growth</h3>
+          <div className="flex items-center">
+            <p className={`text-3xl font-bold ${growth >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {growth >= 0 ? '+' : ''}{growth.toFixed(1)}%
+            </p>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">Period over period</p>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative">
@@ -43,14 +93,13 @@ const PurchaseTransactions: React.FC = () => {
           </div>
           
           <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            value={periodFilter}
+            onChange={(e) => setPeriodFilter(e.target.value as 'current' | 'previous' | 'all')}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <option value="all">All Status</option>
-            <option value="paid">Paid</option>
-            <option value="pending">Pending</option>
-            <option value="overdue">Overdue</option>
+            <option value="all">All Periods</option>
+            <option value="current">{currentPeriodLabel}</option>
+            <option value="previous">{previousPeriodLabel}</option>
           </select>
         </div>
         
@@ -92,23 +141,25 @@ const PurchaseTransactions: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTransactions.map((transaction, index) => (
-                <tr key={index} className="hover:bg-gray-50">
+              {filteredTransactions.map((transaction) => (
+                <tr key={transaction.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    #PO-{String(index + 1).padStart(6, '0')}
+                    {transaction.voucherNumber}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                    {transaction.date}
+                    {new Date(transaction.date).toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
-                    {transaction.supplier}
+                    {transaction.partyName}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-right">
                     {formatCurrency(transaction.amount)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(transaction.status)}`}>
-                      {transaction.status}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      transaction.period === 'current' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {transaction.period === 'current' ? currentPeriodLabel : previousPeriodLabel}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -124,7 +175,7 @@ const PurchaseTransactions: React.FC = () => {
         
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
           <div className="flex items-center justify-between text-sm text-gray-600">
-            <p>Showing {filteredTransactions.length} of {data.purchases.recentTransactions.length} transactions</p>
+            <p>Showing {filteredTransactions.length} of {allTransactions.length} transactions</p>
             <div className="flex space-x-2">
               <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 transition-colors">
                 Previous

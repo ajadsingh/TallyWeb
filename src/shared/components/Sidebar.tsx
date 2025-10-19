@@ -39,14 +39,17 @@ const SidebarLink: React.FC<SidebarLinkProps> = React.memo(({ link, className, o
     <button
       onClick={link.onClick}
       className={cn(
-        "flex items-center gap-3 group/sidebar py-3 px-3 rounded-lg transition-all duration-300 ease-out w-full text-left",
-        "hover:bg-gray-100 dark:hover:bg-neutral-700 hover:scale-[1.02]",
-        !open && "justify-center px-2",
+        "flex items-center group/sidebar py-3 rounded-lg transition-all duration-300 ease-out w-full",
+        "hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:scale-[1.02]",
+        open ? "gap-3 px-3 text-left" : "justify-center px-0",
         className
       )}
       title={!open ? link.label : undefined}
     >
-      <div className="shrink-0 transition-transform duration-300 ease-out group-hover/sidebar:scale-110">
+      <div className={cn(
+        "shrink-0 transition-all duration-300 ease-out group-hover/sidebar:scale-110 flex items-center justify-center",
+        !open && "w-full"
+      )}>
         {link.icon}
       </div>
       <motion.span
@@ -130,7 +133,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "Dashboard",
       id: "dashboard",
-      icon: <BarChart3 className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <BarChart3 className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "dashboard" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('dashboard');
         if (isMobile) setOpen(false);
@@ -139,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "Sales",
       id: "sales",
-      icon: <ShoppingCart className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <ShoppingCart className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "sales" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('sales');
         if (isMobile) setOpen(false);
@@ -148,7 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "Purchases",
       id: "purchases",
-      icon: <Package className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <Package className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "purchases" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('purchases');
         if (isMobile) setOpen(false);
@@ -157,7 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "Inventory",
       id: "inventory",
-      icon: <Package className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <Package className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "inventory" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('inventory');
         if (isMobile) setOpen(false);
@@ -166,7 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "Expenses",
       id: "expenses",
-      icon: <CreditCard className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <CreditCard className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "expenses" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('expenses');
         if (isMobile) setOpen(false);
@@ -175,7 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "Reports",
       id: "reports",
-      icon: <FileText className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <FileText className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "reports" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('reports');
         if (isMobile) setOpen(false);
@@ -184,7 +187,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "GST",
       id: "gst",
-      icon: <Calculator className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <Calculator className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "gst" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('gst');
         if (isMobile) setOpen(false);
@@ -193,7 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "Ledger",
       id: "ledger",
-      icon: <BookOpen className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <BookOpen className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "ledger" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('ledger');
         if (isMobile) setOpen(false);
@@ -202,7 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "Company",
       id: "company",
-      icon: <Building2 className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <Building2 className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "company" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('company');
         if (isMobile) setOpen(false);
@@ -211,13 +214,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
     {
       label: "Settings",
       id: "settings",
-      icon: <Settings className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />,
+      icon: <Settings className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "settings" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
       onClick: () => {
         onViewChange('settings');
         if (isMobile) setOpen(false);
       }
     },
-  ], [onViewChange, isMobile]);
+  ], [onViewChange, isMobile, currentView]);
 
   return (
     <>
@@ -313,7 +316,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
 
           {/* Navigation Links */}
           <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-            <div className="px-3 space-y-1">
+            <div className={cn("space-y-1", open ? "px-3" : "px-2")}>
               {links.map((link, idx) => (
                 <motion.div 
                   key={idx} 
@@ -322,15 +325,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
                   whileTap={{ scale: 0.98 }}
                   transition={{ duration: 0.2, ease: "easeOut" }}
                   className={cn(
-                    "rounded-lg transition-colors duration-200",
-                    currentView === link.id && "bg-blue-50 dark:bg-blue-950"
+                    "rounded-lg transition-all duration-200",
+                    currentView === link.id && "bg-blue-100 dark:bg-blue-900/50 shadow-sm",
+                    !open && currentView === link.id && "ring-2 ring-blue-500 ring-offset-1"
                   )}
                 >
                   <SidebarLink 
                     link={link}
                     open={open}
                     className={cn(
-                      currentView === link.id && "text-blue-600 dark:text-blue-400"
+                      currentView === link.id && "text-blue-600 dark:text-blue-400 font-medium"
                     )}
                   />
                 </motion.div>
