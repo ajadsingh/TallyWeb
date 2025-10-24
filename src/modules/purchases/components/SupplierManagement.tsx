@@ -1,28 +1,69 @@
-import React, { useState } from 'react';
-import { Search, Plus, Edit, Trash2, Phone, Mail, MapPin, Star } from 'lucide-react';
-import { useDashboardContext } from '../../../context/DashboardContext';
+import React, { useState, useMemo } from 'react';
+import { Search, Plus, Edit, Trash2, Phone, Mail, MapPin, Star, Loader } from 'lucide-react';
+import { PurchaseVoucher } from '../../../services/api/purchases/purchasesApiService';
 import { formatCurrency } from '../../../shared/utils/formatters';
 
-const SupplierManagement: React.FC = () => {
-  const { data } = useDashboardContext();
+interface SupplierManagementProps {
+  purchaseVouchers: PurchaseVoucher[];
+  loading: boolean;
+}
+
+const SupplierManagement: React.FC<SupplierManagementProps> = ({ purchaseVouchers, loading }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Extended supplier data with contact information
-  const suppliers = data.purchases.topSuppliers.map((supplier, index) => ({
-    ...supplier,
-    id: index + 1,
-    email: `procurement@${supplier.name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.com`,
-    phone: `+91 ${Math.floor(Math.random() * 9000000000) + 1000000000}`,
-    address: `${Math.floor(Math.random() * 999) + 1}, Industrial Area, Pune`,
-    totalOrders: Math.floor(Math.random() * 30) + 15,
-    rating: (4 + Math.random()).toFixed(1),
-    lastOrder: `${Math.floor(Math.random() * 30) + 1}/01/2025`,
-    paymentTerms: ['30 Days', '45 Days', '60 Days'][Math.floor(Math.random() * 3)]
-  }));
+  // Calculate supplier data from purchase vouchers
+  const suppliers = useMemo(() => {
+    const supplierMap = new Map<string, {
+      name: string;
+      totalAmount: number;
+      totalOrders: number;
+      lastOrderDate: string | null;
+    }>();
+
+    purchaseVouchers.forEach(voucher => {
+      const existing = supplierMap.get(voucher.partyName);
+      if (existing) {
+        existing.totalAmount += voucher.amount;
+        existing.totalOrders += 1;
+        if (voucher.date && (!existing.lastOrderDate || new Date(voucher.date) > new Date(existing.lastOrderDate))) {
+          existing.lastOrderDate = voucher.date;
+        }
+      } else {
+        supplierMap.set(voucher.partyName, {
+          name: voucher.partyName,
+          totalAmount: voucher.amount,
+          totalOrders: 1,
+          lastOrderDate: voucher.date
+        });
+      }
+    });
+
+    return Array.from(supplierMap.values())
+      .map((supplier, index) => ({
+        ...supplier,
+        id: index + 1,
+        email: `procurement@${supplier.name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')}.com`,
+        phone: `+91 ${Math.floor(Math.random() * 9000000000) + 1000000000}`,
+        address: `${Math.floor(Math.random() * 999) + 1}, Industrial Area, Pune`,
+        rating: (4 + Math.random()).toFixed(1),
+        lastOrder: supplier.lastOrderDate ? new Date(supplier.lastOrderDate).toLocaleDateString() : 'N/A',
+        paymentTerms: ['30 Days', '45 Days', '60 Days'][Math.floor(Math.random() * 3)]
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [purchaseVouchers]);
 
   const filteredSuppliers = suppliers.filter(supplier =>
     supplier.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader className="w-8 h-8 animate-spin text-purple-500" />
+        <span className="ml-3 text-gray-600">Loading supplier data...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -84,7 +125,7 @@ const SupplierManagement: React.FC = () => {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-gray-600">Total Purchases</p>
-                  <p className="font-bold text-blue-600">{formatCurrency(supplier.amount)}</p>
+                  <p className="font-bold text-blue-600">{formatCurrency(supplier.totalAmount)}</p>
                 </div>
                 <div>
                   <p className="text-gray-600">Total Orders</p>

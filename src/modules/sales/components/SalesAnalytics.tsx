@@ -174,7 +174,7 @@ export const SalesAnalytics: React.FC<SalesAnalyticsProps> = ({
     <div className="space-y-6">
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl p-6 shadow-lg">
+        <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl p-6 shadow-lg hover:shadow-2xl hover:from-emerald-600 hover:to-emerald-700 hover:scale-105 transition-all duration-300 cursor-pointer">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-emerald-100 text-sm font-medium">Total Revenue</p>
@@ -185,7 +185,7 @@ export const SalesAnalytics: React.FC<SalesAnalyticsProps> = ({
           </div>
         </div>
 
-        <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl p-6 shadow-lg">
+        <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl p-6 shadow-lg hover:shadow-2xl hover:from-indigo-600 hover:to-indigo-700 hover:scale-105 transition-all duration-300 cursor-pointer">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-indigo-100 text-sm font-medium">Total Orders</p>
@@ -196,7 +196,7 @@ export const SalesAnalytics: React.FC<SalesAnalyticsProps> = ({
           </div>
         </div>
 
-        <div className="bg-gradient-to-r from-violet-500 to-violet-600 text-white rounded-xl p-6 shadow-lg">
+        <div className="bg-gradient-to-r from-violet-500 to-violet-600 text-white rounded-xl p-6 shadow-lg hover:shadow-2xl hover:from-violet-600 hover:to-violet-700 hover:scale-105 transition-all duration-300 cursor-pointer">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-violet-100 text-sm font-medium">Unique Customers</p>
@@ -211,7 +211,7 @@ export const SalesAnalytics: React.FC<SalesAnalyticsProps> = ({
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Daily Sales Chart */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-2xl hover:border-indigo-300 transition-all duration-300">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Daily Sales (Last 30 Days)</h3>
           <div className="space-y-3">
             {analytics.dailySales.slice(-10).map((day) => (
@@ -239,7 +239,7 @@ export const SalesAnalytics: React.FC<SalesAnalyticsProps> = ({
         </div>
 
         {/* Monthly Sales Chart */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-2xl hover:border-emerald-300 transition-all duration-300">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">{analytics.financialYear} Monthly Sales Overview</h3>
           <div className="space-y-3">
             {analytics.monthlySales.map((month) => (
@@ -268,7 +268,7 @@ export const SalesAnalytics: React.FC<SalesAnalyticsProps> = ({
       </div>
 
       {/* Top Customers Analysis */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-xl hover:border-violet-300 transition-all duration-300">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Top Customers Analysis</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
