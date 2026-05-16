@@ -6,56 +6,18 @@ import CompanyApiService, { type TallyCompanyDetails } from '../../services/api/
 import { balanceSheetApiService, type BalanceSheetData } from '../../services/api/balanceSheetApiService';
 import { cacheService } from '../../services/cacheService';
 import { useCompany } from '../../context/CompanyContext';
+import { useGlobalDateRange } from '../../context/GlobalDateRangeContext';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './components/Tabs';
 import CompanyDetailsView from './components/CompanyDetailsView';
 import BalanceSheetView from './components/BalanceSheetView';
 
 const CompanyModule: React.FC = () => {
   const { selectedCompany, serverUrl } = useCompany();
+  const { dateRange } = useGlobalDateRange();
   const [companyDetails, setCompanyDetails] = useState<TallyCompanyDetails | null>(null);
   const [balanceSheet, setBalanceSheet] = useState<BalanceSheetData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Auto-calculate current year dates
-  const getCurrentYearDates = (fyStartMonth: number = 3) => { // 3 = April (0-indexed), can be changed
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth(); // 0-indexed (0 = January, 3 = April)
-    
-    // Financial year calculation based on fyStartMonth
-    // fyStartMonth: 0=January, 1=February, 2=March, 3=April, etc.
-    let fyStartYear, fyEndYear;
-    
-    if (currentMonth >= fyStartMonth) { // First half of FY
-      fyStartYear = currentYear;
-      fyEndYear = currentYear + 1;
-    } else { // Second half of FY
-      fyStartYear = currentYear - 1;
-      fyEndYear = currentYear;
-    }
-    
-    const fyStartMonthFormatted = (fyStartMonth + 1).toString().padStart(2, '0');
-    const fromDate = `${fyStartYear}-${fyStartMonthFormatted}-01`; // Start of current financial year
-    const toDate = now.toISOString().split('T')[0]; // Today's date
-    
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    return { 
-      fromDate, 
-      toDate,
-      financialYear: `${fyStartYear}-${fyEndYear.toString().slice(-2)}`, // e.g., "2025-26"
-      fyStartMonth: monthNames[fyStartMonth]
-    };
-  };
-
-  // Configure your financial year start month here:
-  // 0=January, 1=February, 2=March, 3=April, 6=July, etc.
-  const FINANCIAL_YEAR_START_MONTH = 3; // Default: April (Indian FY)
-  
-  const { fromDate: initialFromDate, toDate: initialToDate } = getCurrentYearDates(FINANCIAL_YEAR_START_MONTH);
-  const [fromDate, setFromDate] = useState(initialFromDate);
-  const [toDate, setToDate] = useState(initialToDate);
 
   const companyApiService = new CompanyApiService();
 
@@ -77,8 +39,9 @@ const CompanyModule: React.FC = () => {
   }, [selectedCompany]);
 
   useEffect(() => {
-    loadBalanceSheet();
-  }, [fromDate, toDate]);
+    if (selectedCompany) loadBalanceSheet();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange]);
 
   const loadCompanyDetails = async () => {
     if (!selectedCompany) {
@@ -105,8 +68,8 @@ const CompanyModule: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const formattedFromDate = fromDate.replace(/-/g, '');
-      const formattedToDate = toDate.replace(/-/g, '');
+      const formattedFromDate = dateRange.from ? dateRange.from.replace(/-/g, '') : '';
+      const formattedToDate = dateRange.to ? dateRange.to.replace(/-/g, '') : '';
       
       // Clear any cached balance sheet data for different date ranges
       cacheService.delete('balanceSheet');
@@ -232,111 +195,14 @@ const CompanyModule: React.FC = () => {
           </TabsContent>
           
           <TabsContent value="balance-sheet" className="space-y-8">
-            {/* Date Controls for Balance Sheet */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white/80 backdrop-blur-sm rounded-xl border border-white/20 shadow-lg p-6"
-            >
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center">
-                    <Calendar className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Balance Sheet Controls</h3>
-                    <p className="text-sm text-gray-600">Select date range for financial analysis</p>
-                  </div>
-                </div>
-              
-                <div className="flex flex-col gap-6">
-                  {/* Financial Year Selection */}
-                  <div className="space-y-3">
-                    <span className="text-sm text-gray-700 font-semibold">Quick Financial Year Selection:</span>
-                    <div className="flex flex-wrap gap-2">
-                      {[2020, 2021, 2022, 2023, 2024].map(year => (
-                        <button
-                          key={year}
-                          onClick={() => {
-                            setFromDate(`${year}-04-01`);
-                            setToDate(`${year + 1}-03-31`);
-                          }}
-                          className="px-4 py-2 text-sm bg-gradient-to-r from-purple-100 to-pink-100 hover:from-purple-200 hover:to-pink-200 text-purple-700 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-                          title={`Financial Year ${year}-${(year + 1).toString().slice(-2)}`}
-                        >
-                          FY {year}-{(year + 1).toString().slice(-2)}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => {
-                          const { fromDate: newFromDate, toDate: newToDate } = getCurrentYearDates(FINANCIAL_YEAR_START_MONTH);
-                          setFromDate(newFromDate);
-                          setToDate(newToDate);
-                        }}
-                        className="px-4 py-2 text-sm bg-gradient-to-r from-blue-100 to-indigo-100 hover:from-blue-200 hover:to-indigo-200 text-blue-700 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-                        title="Current Financial Year"
-                      >
-                        Current FY
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Custom Date Range */}
-                  <div className="space-y-3">
-                    <span className="text-sm text-gray-700 font-semibold">Custom Date Range:</span>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <input
-                        type="date"
-                        value={fromDate}
-                        onChange={(e) => setFromDate(e.target.value)}
-                        className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                      <span className="text-gray-500 font-medium">to</span>
-                      <input
-                        type="date"
-                        value={toDate}
-                        onChange={(e) => setToDate(e.target.value)}
-                        className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                      <button
-                        onClick={handleRefresh}
-                        disabled={loading}
-                        className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                        Apply Range
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            {/* Period set globally from top bar */}
+            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200/50 rounded-xl px-5 py-3">
+              <Calendar className="w-4 h-4 text-blue-500 shrink-0" />
+              <div>
+                <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide">Reporting Period</p>
+                <p className="text-sm font-bold text-blue-800">{dateRange.label || 'All Time'}</p>
               </div>
-            </motion.div>
-          
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50 rounded-xl p-6 shadow-sm"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <h4 className="text-blue-900 font-semibold">Current Reporting Period</h4>
-                  <p className="text-blue-700 text-sm">
-                    {new Date(fromDate).toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })} to {new Date(toDate).toLocaleDateString('en-US', { 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
+            </div>
             <BalanceSheetView 
               balanceSheet={balanceSheet} 
               loading={loading}
@@ -345,106 +211,14 @@ const CompanyModule: React.FC = () => {
           </TabsContent>
           
           <TabsContent value="analytics" className="space-y-8">
-            {/* Date Controls for Analytics */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white/80 backdrop-blur-sm rounded-xl border border-white/20 shadow-lg p-6"
-            >
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                    <BarChart3 className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Analytics Controls</h3>
-                    <p className="text-sm text-gray-600">Configure data range for detailed analysis</p>
-                  </div>
-                </div>
-              
-                <div className="flex flex-col gap-6">
-                  {/* Financial Year Selection */}
-                  <div className="space-y-3">
-                    <span className="text-sm text-gray-700 font-semibold">Quick Financial Year Selection:</span>
-                    <div className="flex flex-wrap gap-2">
-                      {[2020, 2021, 2022, 2023, 2024].map(year => (
-                        <button
-                          key={year}
-                          onClick={() => {
-                            setFromDate(`${year}-04-01`);
-                            setToDate(`${year + 1}-03-31`);
-                          }}
-                          className="px-4 py-2 text-sm bg-gradient-to-r from-purple-100 to-pink-100 hover:from-purple-200 hover:to-pink-200 text-purple-700 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-                          title={`Financial Year ${year}-${(year + 1).toString().slice(-2)}`}
-                        >
-                          FY {year}-{(year + 1).toString().slice(-2)}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => {
-                          const { fromDate: newFromDate, toDate: newToDate } = getCurrentYearDates(FINANCIAL_YEAR_START_MONTH);
-                          setFromDate(newFromDate);
-                          setToDate(newToDate);
-                        }}
-                        className="px-4 py-2 text-sm bg-gradient-to-r from-blue-100 to-indigo-100 hover:from-blue-200 hover:to-indigo-200 text-blue-700 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
-                        title="Current Financial Year"
-                      >
-                        Current FY
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Custom Date Range */}
-                  <div className="space-y-3">
-                    <span className="text-sm text-gray-700 font-semibold">Custom Date Range:</span>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <input
-                        type="date"
-                        value={fromDate}
-                        onChange={(e) => setFromDate(e.target.value)}
-                        className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      />
-                      <span className="text-gray-500 font-medium">to</span>
-                      <input
-                        type="date"
-                        value={toDate}
-                        onChange={(e) => setToDate(e.target.value)}
-                        className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                      />
-                      <button
-                        onClick={handleRefresh}
-                        disabled={loading}
-                        className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                        Apply Range
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            {/* Period set globally from top bar */}
+            <div className="flex items-center gap-3 bg-purple-50 border border-purple-200/50 rounded-xl px-5 py-3">
+              <BarChart3 className="w-4 h-4 text-purple-500 shrink-0" />
+              <div>
+                <p className="text-[10px] font-semibold text-purple-400 uppercase tracking-wide">Analytics Period</p>
+                <p className="text-sm font-bold text-purple-800">{dateRange.label || 'All Time'}</p>
               </div>
-            </motion.div>
-          
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200/50 rounded-xl p-6 shadow-sm"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <h4 className="text-purple-900 font-semibold">Analytics Period</h4>
-                  <p className="text-purple-700 text-sm">
-                    Data analysis from {new Date(fromDate).toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      year: 'numeric' 
-                    })}
-                  </p>
-                </div>
-              </div>
-            </motion.div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

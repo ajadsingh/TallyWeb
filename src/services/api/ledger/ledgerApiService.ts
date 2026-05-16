@@ -115,45 +115,42 @@ export default class LedgerApiService extends BaseApiService {
     const doc = this.parseXML(xmlText);
     const ledgers: TallyLedger[] = [];
 
-    // Handle collection response format
-    const ledgerNodes = doc.querySelectorAll('LEDGER');
-    
+    // getElementsByTagName works reliably across all Tally XML response formats
+    const ledgerNodes = Array.from(doc.getElementsByTagName('LEDGER'));
+
     ledgerNodes.forEach(ledgerNode => {
       try {
-        const name = ledgerNode.getAttribute('NAME') || '';
+        // NAME can be in getAttribute OR in a child <NAME> element
+        const name = ledgerNode.getAttribute('NAME')
+          || ledgerNode.getElementsByTagName('NAME')[0]?.textContent?.trim()
+          || '';
         const id = ledgerNode.getAttribute('ID') || '';
-        
-        // Get text content from child elements
-        const getElementText = (tagName: string): string => {
-          const element = ledgerNode.querySelector(tagName);
-          return element?.textContent?.trim() || '';
-        };
 
-        const getElementNumber = (tagName: string): number => {
-          const text = getElementText(tagName);
-          return this.parseAmount(text);
+        const getNodeText = (tagName: string): string => {
+          const nodes = ledgerNode.getElementsByTagName(tagName);
+          return nodes.length > 0 ? (nodes[0].textContent?.trim() || '') : '';
         };
-
-        const getElementBoolean = (tagName: string): boolean => {
-          const text = getElementText(tagName);
-          return text.toLowerCase() === 'yes' || text.toLowerCase() === 'true';
+        const getNodeNumber  = (t: string) => this.parseAmount(getNodeText(t));
+        const getNodeBoolean = (t: string) => {
+          const v = getNodeText(t).toLowerCase();
+          return v === 'yes' || v === 'true';
         };
 
         if (name) {
           ledgers.push({
             name,
             id,
-            parent: getElementText('PARENT'),
-            taxType: getElementText('TAXTYPE'),
-            isBillWiseOn: getElementBoolean('ISBILLWISEON'),
-            isCostCentresOn: getElementBoolean('ISCOSTCENTRESON'),
-            isRevenue: getElementBoolean('ISREVENUE'),
-            isDeemedPositive: getElementBoolean('ISDEEMEDPOSITIVE'),
-            canDelete: getElementBoolean('CANDELETE'),
-            forPayroll: getElementBoolean('FORPAYROLL'),
-            masterId: parseInt(getElementText('MASTERID')) || 0,
-            closingBalance: getElementNumber('CLOSINGBALANCE'),
-            openingBalance: getElementNumber('OPENINGBALANCE'),
+            parent:          getNodeText('PARENT'),
+            taxType:         getNodeText('TAXTYPE'),
+            isBillWiseOn:    getNodeBoolean('ISBILLWISEON'),
+            isCostCentresOn: getNodeBoolean('ISCOSTCENTRESON'),
+            isRevenue:       getNodeBoolean('ISREVENUE'),
+            isDeemedPositive:getNodeBoolean('ISDEEMEDPOSITIVE'),
+            canDelete:       getNodeBoolean('CANDELETE'),
+            forPayroll:      getNodeBoolean('FORPAYROLL'),
+            masterId:        parseInt(getNodeText('MASTERID')) || 0,
+            closingBalance:  getNodeNumber('CLOSINGBALANCE'),
+            openingBalance:  getNodeNumber('OPENINGBALANCE'),
           });
         }
       } catch (error) {

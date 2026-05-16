@@ -8,6 +8,10 @@ export interface AppConfig {
   serverPort?: number;
   currentCompany?: string;
   connectionTimeout?: number;
+  /** Additional custom voucher type names for Purchase (custom Tally) */
+  purchaseVoucherTypes?: string[];
+  /** Additional custom voucher type names for Sales (custom Tally) */
+  salesVoucherTypes?: string[];
 }
 
 export interface CompanyInfo {
@@ -81,6 +85,22 @@ class AppConfigService {
 
   public getCurrentCompany(): string | null {
     return this.config?.currentCompany || null;
+  }
+
+  public getCustomPurchaseTypes(): string[] {
+    return this.config?.purchaseVoucherTypes ?? [];
+  }
+
+  public getCustomSalesTypes(): string[] {
+    return this.config?.salesVoucherTypes ?? [];
+  }
+
+  public setCustomPurchaseTypes(types: string[]): void {
+    this.updateConfig({ purchaseVoucherTypes: types.filter(t => t.trim()) });
+  }
+
+  public setCustomSalesTypes(types: string[]): void {
+    this.updateConfig({ salesVoucherTypes: types.filter(t => t.trim()) });
   }
 
   public setCurrentCompany(companyName: string): void {

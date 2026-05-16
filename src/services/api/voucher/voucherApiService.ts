@@ -58,13 +58,23 @@ export default class VoucherApiService extends BaseApiService {
   <HEADER>
     <VERSION>1</VERSION>
     <TALLYREQUEST>Export</TALLYREQUEST>
-    <TYPE>Data</TYPE>
-    <ID>Day Book</ID>
+    <TYPE>Collection</TYPE>
+    <ID>LedgerVouchers</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>${staticVarsXml}
       </STATICVARIABLES>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="LedgerVouchers">
+            <TYPE>Voucher</TYPE>
+            <FETCH>DATE, VOUCHERNUMBER, VOUCHERTYPENAME, PARTYLEDGERNAME, AMOUNT, GUID, NARRATION</FETCH>
+            <FETCH>ALLLEDGERENTRIES.LIST : LEDGERNAME, AMOUNT, ISDEBIT</FETCH>
+            <FETCH>ALLINVENTORYENTRIES.LIST : STOCKITEMNAME, ACTUALQTY, BILLEDQTY, RATE, AMOUNT, BASEUNITS</FETCH>
+          </COLLECTION>
+        </TDLMESSAGE>
+      </TDL>
     </DESC>
   </BODY>
 </ENVELOPE>`;
@@ -73,11 +83,15 @@ export default class VoucherApiService extends BaseApiService {
       const response = await this.makeRequest(xmlRequest);
       
       if (response.includes('Unknown Request') || response.includes('LINEERROR')) {
-        console.warn('Tally server error in response:', response);
+        console.warn('Tally server error in response:', response.substring(0, 500));
         throw new Error('Invalid request format or ledger not found');
       }
+
+      // --- DEBUG: log first 2000 chars of raw XML so we can verify tag names ---
+      console.log('[VoucherAPI] raw XML (first 2000):', response.substring(0, 2000));
       
       const allTransactions = this.parseVoucherTransactions(response);
+      console.log(`[VoucherAPI] parsed ${allTransactions.length} total vouchers; first:`, allTransactions[0]);
       
       // Filter transactions by ledger name if specified
       let filteredTransactions = allTransactions;
@@ -103,6 +117,7 @@ export default class VoucherApiService extends BaseApiService {
         });
       }
       
+      console.log(`[VoucherAPI] after ledger filter "${ledgerName}": ${filteredTransactions.length} vouchers`);
       return filteredTransactions;
     } catch (error) {
       console.error('Failed to fetch voucher transactions:', error);
@@ -117,8 +132,14 @@ export default class VoucherApiService extends BaseApiService {
     const doc = this.parseXML(xmlText);
     const transactions: VoucherTransaction[] = [];
 
-    // Find all VOUCHER elements
-    const voucherNodes = doc.querySelectorAll('VOUCHER');
+    // Find all VOUCHER elements (getElementsByTagName works on both Day Book and TDL Collection responses)
+    const voucherNodes = Array.from(doc.getElementsByTagName('VOUCHER'));
+    console.log(`[VoucherAPI] found ${voucherNodes.length} VOUCHER nodes`);
+    if (voucherNodes.length > 0) {
+      // Log tag names inside first voucher to see what Tally actually returned
+      const firstTags = Array.from(voucherNodes[0].children).map(c => c.tagName);
+      console.log('[VoucherAPI] first VOUCHER child tags:', firstTags);
+    }
     
     voucherNodes.forEach(voucherNode => {
       try {
@@ -129,51 +150,65 @@ export default class VoucherApiService extends BaseApiService {
         const partyName = this.getElementText(voucherNode, 'PARTYLEDGERNAME') || 
                           this.getElementText(voucherNode, 'PARTYNAME');
 
-        // Extract ledger entries
+        // ── Ledger entries ────────────────────────────────────────────────
+        // Use getElementsByTagName (not querySelectorAll) because CSS selectors
+        // do not reliably match XML tag names that contain a literal dot.
         const ledgerEntries: LedgerEntry[] = [];
-        const ledgerEntryNodes = voucherNode.querySelectorAll('LEDGERENTRIES\\.LIST');
-        
-        ledgerEntryNodes.forEach(entryNode => {
-          const ledgerName = this.getElementText(entryNode, 'LEDGERNAME');
-          const amountText = this.getElementText(entryNode, 'AMOUNT');
-          const narration = this.getElementText(entryNode, 'NARRATION');
+
+        // Try both LEDGERENTRIES.LIST and ALLLEDGERENTRIES.LIST (Tally uses both)
+        const ledgerListNodes = [
+          ...Array.from(voucherNode.getElementsByTagName('LEDGERENTRIES.LIST')),
+          ...Array.from(voucherNode.getElementsByTagName('ALLLEDGERENTRIES.LIST')),
+        ];
+        if (ledgerListNodes.length === 0) {
+          // Log for first voucher only to avoid flooding console
+          if (transactions.length === 0) {
+            console.log('[VoucherAPI] no LEDGERENTRIES.LIST found in first voucher. outerHTML:', voucherNode.outerHTML?.substring(0, 800));
+          }
+        }
+
+        ledgerListNodes.forEach(entryNode => {
+          const ledgerName = this.getNodeText(entryNode, 'LEDGERNAME');
+          const amountText = this.getNodeText(entryNode, 'AMOUNT');
+          const narration  = this.getNodeText(entryNode, 'NARRATION');
           
           if (ledgerName && amountText) {
             ledgerEntries.push({
               ledgerName,
               amount: this.parseAmount(amountText),
-              narration: narration || undefined
+              narration: narration || undefined,
             });
           }
         });
 
-        // Extract inventory entries separately
+        // ── Inventory entries ─────────────────────────────────────────────
         const inventoryEntries: InventoryEntry[] = [];
-        const inventoryNodes = voucherNode.querySelectorAll('ALLINVENTORYENTRIES\\.LIST');
-        
-        inventoryNodes.forEach(invNode => {
-          const stockName = this.getElementText(invNode, 'STOCKITEMNAME');
-          const amountText = this.getElementText(invNode, 'AMOUNT');
-          const quantity = this.getElementText(invNode, 'BILLEDQTY') || this.getElementText(invNode, 'ACTUALQTY');
-          const rate = this.getElementText(invNode, 'RATE');
-          const unit = this.getElementText(invNode, 'BASEUNIT') || this.getElementText(invNode, 'UOM');
+
+        // Try both ALLINVENTORYENTRIES.LIST and INVENTORYENTRIES.LIST
+        const inventoryListNodes = [
+          ...Array.from(voucherNode.getElementsByTagName('ALLINVENTORYENTRIES.LIST')),
+          ...Array.from(voucherNode.getElementsByTagName('INVENTORYENTRIES.LIST')),
+        ];
+
+        inventoryListNodes.forEach(invNode => {
+          const stockName  = this.getNodeText(invNode, 'STOCKITEMNAME');
+          const amountText = this.getNodeText(invNode, 'AMOUNT');
+          const quantity   = this.getNodeText(invNode, 'BILLEDQTY') || this.getNodeText(invNode, 'ACTUALQTY');
+          const rate       = this.getNodeText(invNode, 'RATE');
+          const unit       = this.getNodeText(invNode, 'BASEUNIT') || this.getNodeText(invNode, 'UOM') || this.getNodeText(invNode, 'BASEUNITS');
           
           if (stockName && amountText) {
-            const amount = this.parseAmount(amountText);
-            const qty = parseFloat(quantity || '0');
-            const rateValue = this.parseAmount(rate || '0');
-            
             inventoryEntries.push({
               stockName,
-              quantity: qty,
-              rate: rateValue,
-              amount: Math.abs(amount), // Always show positive amounts for inventory
-              unit: unit || undefined
+              quantity: parseFloat(quantity || '0') || 0,
+              rate: this.parseAmount(rate || '0'),
+              amount: Math.abs(this.parseAmount(amountText)),
+              unit: unit || undefined,
             });
           }
         });
 
-        // Calculate total amount - look for the party ledger amount (should be negative for sales)
+        // Calculate total amount
         let totalAmount = 0;
         const partyEntry = ledgerEntries.find(entry => 
           entry.ledgerName === partyName || 
@@ -181,22 +216,25 @@ export default class VoucherApiService extends BaseApiService {
         );
         
         if (partyEntry) {
-          // For sales transactions, party amount is negative, so we take absolute value
           totalAmount = Math.abs(partyEntry.amount);
         } else {
-          // Fallback: sum of inventory amounts or positive ledger amounts
-          const inventoryTotal = inventoryEntries.reduce((sum, entry) => sum + entry.amount, 0);
-          
+          const inventoryTotal = inventoryEntries.reduce((sum, e) => sum + e.amount, 0);
           if (inventoryTotal > 0) {
             totalAmount = inventoryTotal;
           } else {
             totalAmount = ledgerEntries
-              .filter(entry => entry.amount > 0)
-              .reduce((sum, entry) => sum + entry.amount, 0);
+              .filter(e => e.amount > 0)
+              .reduce((sum, e) => sum + e.amount, 0);
+            // If all amounts are negative (Tally convention), take abs of the largest
+            if (totalAmount === 0 && ledgerEntries.length > 0) {
+              totalAmount = Math.max(...ledgerEntries.map(e => Math.abs(e.amount)));
+            }
           }
         }
 
-        if (date && voucherType && voucherNumber && (ledgerEntries.length > 0 || inventoryEntries.length > 0)) {
+        // Always push the transaction if it has the basic fields — even if
+        // entry arrays end up empty (the UI shows a fallback message in that case).
+        if (date && voucherType && voucherNumber) {
           transactions.push({
             date: this.formatDate(date),
             voucherType,
@@ -204,7 +242,7 @@ export default class VoucherApiService extends BaseApiService {
             partyName: partyName || 'Unknown',
             amount: totalAmount,
             ledgerEntries,
-            inventoryEntries
+            inventoryEntries,
           });
         }
       } catch (error) {
@@ -217,11 +255,22 @@ export default class VoucherApiService extends BaseApiService {
   }
 
   /**
+   * Reliable text extraction using getElementsByTagName (no CSS selector, no dot escaping).
+   * Falls back to querySelector for simple (no-dot) tag names.
+   */
+  private getNodeText(parentNode: Element, tagName: string): string {
+    const nodes = parentNode.getElementsByTagName(tagName);
+    if (nodes.length > 0) return nodes[0].textContent?.trim() || '';
+    // Fallback for simple names
+    const el = parentNode.querySelector(tagName);
+    return el?.textContent?.trim() || '';
+  }
+
+  /**
    * Helper method to get text content from an element
    */
   private getElementText(parentNode: Element, tagName: string): string {
-    const element = parentNode.querySelector(tagName);
-    return element?.textContent?.trim() || '';
+    return this.getNodeText(parentNode, tagName);
   }
 
   /**

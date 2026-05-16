@@ -1,20 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  ArrowLeft,
-  TrendingUp,
-  TrendingDown,
-  Building,
-  FileText,
-  Download,
-  RefreshCw,
-  Search,
-  CheckCircle,
-  XCircle,
-  Info
+  ArrowLeft, TrendingUp, TrendingDown, Building2, FileText,
+  RefreshCw, Search, CheckCircle, XCircle, Info, X, ChevronDown, ChevronUp,
+  CreditCard, Package,
 } from 'lucide-react';
+import { useGlobalDateRange } from '../../../context/GlobalDateRangeContext';
 import { TallyLedger } from '../../../services/api/ledger/ledgerApiService';
 import VoucherApiService, { VoucherTransaction } from '../../../services/api/voucher/voucherApiService';
+
+const AVATAR_COLORS = [
+  'bg-blue-500','bg-emerald-500','bg-violet-500','bg-orange-500',
+  'bg-pink-500', 'bg-cyan-500',  'bg-amber-500', 'bg-indigo-500',
+];
+const getAvatarColor = (name: string) =>
+  AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
+
+const formatCurrency = (v: number) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency', currency: 'INR',
+    minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(Math.abs(v));
 
 interface LedgerDetailsProps {
   ledger: TallyLedger;
@@ -24,103 +29,49 @@ interface LedgerDetailsProps {
 }
 
 const LedgerDetails: React.FC<LedgerDetailsProps> = ({ ledger, companyName, serverUrl, onBack }) => {
-  const [activeTab, setActiveTab] = useState<'details' | 'transactions'>('details');
-  const [transactions, setTransactions] = useState<VoucherTransaction[]>([]);
-  const [filteredTransactions, setFilteredTransactions] = useState<VoucherTransaction[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isAllTime, setIsAllTime] = useState(false);
+  // ── Derived flags (FIRST — used everywhere below) ─────────────────────
+  const isPos = ledger.closingBalance > 0;
+  const isNeg = ledger.closingBalance < 0;
 
-  const voucherApi = new VoucherApiService();
+  // ── Global date range ─────────────────────────────────────────────────
+  const { dateRange } = useGlobalDateRange();
+
+  // ── State ──────────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab]       = useState<'details' | 'transactions'>('transactions');
+  const [transactions, setTransactions] = useState<VoucherTransaction[]>([]);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState<string | null>(null);
+  const [searchTerm, setSearchTerm]     = useState('');
+  const [typeFilter, setTypeFilter]     = useState('all');
+  const [expandedTx, setExpandedTx]     = useState<string | null>(null);
+
+  const voucherApi = useRef(new VoucherApiService());
 
   useEffect(() => {
-    if (serverUrl) {
-      voucherApi.setBaseURL(`http://${serverUrl}`);
-    }
-    // Set default date range to current month
-    const { fromDate: defaultFrom, toDate: defaultTo } = VoucherApiService.getCurrentMonthRange();
-    const fromFormatted = formatDateForInput(defaultFrom);
-    const toFormatted = formatDateForInput(defaultTo);
-    setFromDate(fromFormatted);
-    setToDate(toFormatted);
+    if (serverUrl) voucherApi.current.setBaseURL(`http://${serverUrl}`);
   }, [serverUrl]);
 
+  // Reset state + auto-fetch when ledger or global date range changes
   useEffect(() => {
-    filterTransactions();
-  }, [transactions, searchTerm]);
+    setTransactions([]);
+    setError(null);
+    setSearchTerm('');
+    setExpandedTx(null);
+    setTypeFilter('all');
+    if (companyName && ledger.name) runFetch();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ledger.name, companyName, dateRange]);
 
-  const formatDateForInput = (tallyDate: string): string => {
-    if (tallyDate.length === 8) {
-      const year = tallyDate.substring(0, 4);
-      const month = tallyDate.substring(4, 6);
-      const day = tallyDate.substring(6, 8);
-      return `${year}-${month}-${day}`;
-    }
-    return '';
-  };
-
-  const formatDateForTally = (inputDate: string): string => {
-    return inputDate.replace(/-/g, '');
-  };
-
-  const setDateRange = (range: 'currentMonth' | 'lastMonth' | 'currentYear' | 'lastYear') => {
-    const now = new Date();
-    let fromDate = '';
-    let toDate = '';
-
-    switch (range) {
-      case 'currentMonth':
-        fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-        toDate = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-        break;
-      case 'lastMonth':
-        fromDate = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-        toDate = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
-        break;
-      case 'currentYear':
-        fromDate = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
-        toDate = new Date(now.getFullYear(), 11, 31).toISOString().split('T')[0];
-        break;
-      case 'lastYear':
-        fromDate = new Date(now.getFullYear() - 1, 0, 1).toISOString().split('T')[0];
-        toDate = new Date(now.getFullYear() - 1, 11, 31).toISOString().split('T')[0];
-        break;
-    }
-
-    setFromDate(fromDate);
-    setToDate(toDate);
-    setIsAllTime(false);
-  };
-
-  const fetchTransactions = async () => {
-    if (!isAllTime && (!fromDate || !toDate)) {
-      setError('Please select both from and to dates, or choose "All Time"');
-      return;
-    }
-
+  // ── Fetch ──────────────────────────────────────────────────────────────
+  const runFetch = async () => {
+    setLoading(true);
+    setError(null);
+    setExpandedTx(null);
     try {
-      setLoading(true);
-      setError(null);
-      
-      let tallyFromDate = '';
-      let tallyToDate = '';
-      
-      if (!isAllTime) {
-        tallyFromDate = formatDateForTally(fromDate);
-        tallyToDate = formatDateForTally(toDate);
-      } else {
-      }
-      
-      const transactionList = await voucherApi.getVoucherTransactions(
-        companyName,
-        ledger.name,
-        tallyFromDate,
-        tallyToDate
-      );
-      setTransactions(transactionList);
+      const tFrom = dateRange.from ? dateRange.from.replace(/-/g, '') : '';
+      const tTo   = dateRange.to   ? dateRange.to.replace(/-/g, '')   : '';
+      const list  = await voucherApi.current.getVoucherTransactions(companyName, ledger.name, tFrom, tTo);
+      setTransactions(list);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch transactions');
     } finally {
@@ -128,453 +79,395 @@ const LedgerDetails: React.FC<LedgerDetailsProps> = ({ ledger, companyName, serv
     }
   };
 
-  const filterTransactions = () => {
-    if (!searchTerm) {
-      setFilteredTransactions(transactions);
-      return;
+  // ── Derived lists ──────────────────────────────────────────────────────
+  const voucherTypes = useMemo(() =>
+    ['all', ...Array.from(new Set(transactions.map(t => t.voucherType))).sort()],
+    [transactions]);
+
+  const filteredTx = useMemo(() => {
+    let list = transactions;
+    if (typeFilter !== 'all') list = list.filter(t => t.voucherType === typeFilter);
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      list = list.filter(t =>
+        t.voucherNumber.toLowerCase().includes(q) ||
+        t.partyName.toLowerCase().includes(q) ||
+        t.voucherType.toLowerCase().includes(q));
     }
+    return list;
+  }, [transactions, typeFilter, searchTerm]);
 
-    const filtered = transactions.filter(transaction =>
-      transaction.voucherNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.voucherType.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredTransactions(filtered);
-  };
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(Math.abs(amount));
-  };
-
-  const getBalanceColor = (amount: number): string => {
-    if (amount > 0) return 'text-green-600';
-    if (amount < 0) return 'text-red-600';
-    return 'text-gray-600';
-  };
-
-  const getBooleanIcon = (value: boolean) => {
-    return value ? (
-      <CheckCircle className="w-5 h-5 text-green-500" />
-    ) : (
-      <XCircle className="w-5 h-5 text-red-500" />
-    );
-  };
-
-  const renderDetailsTab = () => (
-    <div className="space-y-6">
-      {/* Balance Information */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <motion.div 
-          className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm"
-          whileHover={{ y: -2, boxShadow: "0 8px 25px -5px rgba(0, 0, 0, 0.1)" }}
-        >
-          <div className="flex items-center mb-4">
-            <div className="p-3 bg-blue-100 rounded-lg mr-4">
-              <TrendingUp className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Opening Balance</h3>
-              <p className="text-sm text-gray-600">Balance at period start</p>
-            </div>
-          </div>
-          <div className="flex items-center">
-            <span className={`text-2xl font-bold ${getBalanceColor(ledger.openingBalance)}`}>
-              {formatCurrency(ledger.openingBalance)}
-            </span>
-            <span className="ml-2 text-sm text-gray-500">
-              {ledger.openingBalance >= 0 ? 'Dr' : 'Cr'}
-            </span>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm"
-          whileHover={{ y: -2, boxShadow: "0 8px 25px -5px rgba(0, 0, 0, 0.1)" }}
-        >
-          <div className="flex items-center mb-4">
-            <div className="p-3 bg-green-100 rounded-lg mr-4">
-              <TrendingDown className="w-6 h-6 text-green-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Closing Balance</h3>
-              <p className="text-sm text-gray-600">Current balance</p>
-            </div>
-          </div>
-          <div className="flex items-center">
-            <span className={`text-2xl font-bold ${getBalanceColor(ledger.closingBalance)}`}>
-              {formatCurrency(ledger.closingBalance)}
-            </span>
-            <span className="ml-2 text-sm text-gray-500">
-              {ledger.closingBalance >= 0 ? 'Dr' : 'Cr'}
-            </span>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Ledger Properties */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-          <Info className="w-5 h-5 mr-2" />
-          Ledger Properties
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div>
-            <label className="text-sm font-medium text-gray-600">Parent Group</label>
-            <p className="text-base text-gray-900 mt-1">{ledger.parent}</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-600">Tax Type</label>
-            <p className="text-base text-gray-900 mt-1">{ledger.taxType || 'Not specified'}</p>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-gray-600">Master ID</label>
-            <p className="text-base text-gray-900 mt-1">{ledger.masterId}</p>
-          </div>
+  // ── Details tab ────────────────────────────────────────────────────────
+  const renderDetails = () => (
+    <div className="space-y-4">
+      {/* Balance cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-blue-50 rounded-2xl p-4">
+          <p className="text-xs text-blue-500 font-medium">Opening Balance</p>
+          <p className="text-lg font-bold text-blue-900 mt-1 leading-tight">
+            {formatCurrency(ledger.openingBalance)}
+          </p>
+          <p className="text-[10px] text-blue-400 mt-0.5">
+            {ledger.openingBalance >= 0 ? 'Dr' : 'Cr'}
+          </p>
+        </div>
+        <div className={`rounded-2xl p-4 ${isPos ? 'bg-green-50' : isNeg ? 'bg-red-50' : 'bg-gray-100'}`}>
+          <p className={`text-xs font-medium ${isPos ? 'text-green-500' : isNeg ? 'text-red-500' : 'text-gray-400'}`}>
+            Closing Balance
+          </p>
+          <p className={`text-lg font-bold mt-1 leading-tight ${isPos ? 'text-green-900' : isNeg ? 'text-red-900' : 'text-gray-700'}`}>
+            {formatCurrency(ledger.closingBalance)}
+          </p>
+          <p className={`text-[10px] mt-0.5 ${isPos ? 'text-green-400' : isNeg ? 'text-red-400' : 'text-gray-300'}`}>
+            {isNeg ? 'Cr' : 'Dr'}
+          </p>
         </div>
       </div>
 
-      {/* Configuration Flags */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-          <Building className="w-5 h-5 mr-2" />
-          Configuration Settings
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="flex items-center">
-            {getBooleanIcon(ledger.isBillWiseOn)}
-            <span className="ml-3 text-sm text-gray-700">Bill-wise Details</span>
-          </div>
-          <div className="flex items-center">
-            {getBooleanIcon(ledger.isCostCentresOn)}
-            <span className="ml-3 text-sm text-gray-700">Cost Centres</span>
-          </div>
-          <div className="flex items-center">
-            {getBooleanIcon(ledger.isRevenue)}
-            <span className="ml-3 text-sm text-gray-700">Revenue Ledger</span>
-          </div>
-          <div className="flex items-center">
-            {getBooleanIcon(ledger.isDeemedPositive)}
-            <span className="ml-3 text-sm text-gray-700">Deemed Positive</span>
-          </div>
-          <div className="flex items-center">
-            {getBooleanIcon(ledger.canDelete)}
-            <span className="ml-3 text-sm text-gray-700">Can Delete</span>
-          </div>
-          <div className="flex items-center">
-            {getBooleanIcon(ledger.forPayroll)}
-            <span className="ml-3 text-sm text-gray-700">Payroll Ledger</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderTransactionsTab = () => (
-    <div className="space-y-6">
-      {/* Date Range and Search */}
-      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-        <div className="space-y-4">
-          {/* All Time Toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="text-lg font-medium text-gray-900">Transaction Filter</h4>
-              <p className="text-sm text-gray-600">Choose date range or fetch all transactions</p>
-            </div>
-            <div className="flex items-center space-x-3">
-              <span className="text-sm text-gray-700">All Time</span>
-              <button
-                onClick={() => setIsAllTime(!isAllTime)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  isAllTime ? 'bg-blue-600' : 'bg-gray-200'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    isAllTime ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
-
-          {/* Date Range Selection */}
-          <div className={`transition-opacity duration-200 ${isAllTime ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-            {/* Quick Date Presets */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Quick Select</label>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { label: 'Current Month', value: 'currentMonth' },
-                  { label: 'Last Month', value: 'lastMonth' },
-                  { label: 'Current Year', value: 'currentYear' },
-                  { label: 'Last Year', value: 'lastYear' },
-                ].map((preset) => (
-                  <motion.button
-                    key={preset.value}
-                    whileHover={{ y: -1 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => setDateRange(preset.value as 'currentMonth' | 'lastMonth' | 'currentYear' | 'lastYear')}
-                    disabled={isAllTime}
-                    className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {preset.label}
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col lg:flex-row lg:items-end lg:space-x-4 space-y-4 lg:space-y-0">
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">From Date</label>
-                  <input
-                    type="date"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    disabled={isAllTime}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">To Date</label>
-                  <input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    disabled={isAllTime}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Fetch Button */}
-          <div className="flex justify-end">
-            <motion.button
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={fetchTransactions}
-              disabled={loading}
-              className="inline-flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              {loading ? (
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Search className="w-4 h-4 mr-2" />
-              )}
-              {loading ? 'Fetching...' : `Fetch ${isAllTime ? 'All' : 'Filtered'} Transactions`}
-            </motion.button>
-          </div>
-        </div>
-
-        {/* Search */}
-        {transactions.length > 0 && (
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search by voucher number, party, or type..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <div className="flex items-center">
-            <XCircle className="w-5 h-5 text-red-500 mr-3" />
-            <span className="text-red-700">{error}</span>
-          </div>
+      {/* Net change */}
+      {(ledger.openingBalance !== 0 || ledger.closingBalance !== 0) && (
+        <div className={`rounded-2xl px-4 py-3 flex items-center gap-2 text-sm font-medium ${
+          ledger.closingBalance > ledger.openingBalance ? 'bg-green-50 text-green-700'
+          : ledger.closingBalance < ledger.openingBalance ? 'bg-red-50 text-red-700'
+          : 'bg-gray-50 text-gray-600'}`}>
+          {ledger.closingBalance >= ledger.openingBalance
+            ? <TrendingUp className="w-4 h-4 shrink-0" />
+            : <TrendingDown className="w-4 h-4 shrink-0" />}
+          Net change: {formatCurrency(Math.abs(ledger.closingBalance - ledger.openingBalance))}
+          {' '}· {ledger.closingBalance > ledger.openingBalance ? 'increased'
+            : ledger.closingBalance < ledger.openingBalance ? 'decreased' : 'no change'}
         </div>
       )}
 
-      {/* Transactions List */}
-      {filteredTransactions.length > 0 ? (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                Transactions ({filteredTransactions.length})
-              </h3>
-              {isAllTime ? (
-                <p className="text-sm text-gray-600">Showing all available transactions</p>
-              ) : (
-                <p className="text-sm text-gray-600">
-                  From {fromDate} to {toDate}
-                </p>
-              )}
+      {/* Properties */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Info className="w-4 h-4 text-gray-400" />
+          <h3 className="text-sm font-bold text-gray-700">Ledger Properties</h3>
+        </div>
+        {[
+          { label: 'Parent Group', value: ledger.parent || '—' },
+          { label: 'Tax Type',     value: ledger.taxType || 'Not specified' },
+          { label: 'Master ID',    value: String(ledger.masterId || '—') },
+        ].map(row => (
+          <div key={row.label} className="flex items-start justify-between text-sm gap-3">
+            <span className="text-gray-400 shrink-0">{row.label}</span>
+            <span className="font-medium text-gray-800 text-right break-all">{row.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Configuration flags */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Building2 className="w-4 h-4 text-gray-400" />
+          <h3 className="text-sm font-bold text-gray-700">Configuration</h3>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: 'Bill-wise Details', value: ledger.isBillWiseOn },
+            { label: 'Cost Centres',       value: ledger.isCostCentresOn },
+            { label: 'Revenue Ledger',     value: ledger.isRevenue },
+            { label: 'Deemed Positive',    value: ledger.isDeemedPositive },
+            { label: 'Can Delete',         value: ledger.canDelete },
+            { label: 'Payroll Ledger',     value: ledger.forPayroll },
+          ].map(flag => (
+            <div key={flag.label} className="flex items-center gap-2 py-1">
+              {flag.value
+                ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                : <XCircle    className="w-4 h-4 text-gray-200 shrink-0" />}
+              <span className="text-xs text-gray-600">{flag.label}</span>
             </div>
-            <motion.button
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.98 }}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-50"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </motion.button>
-          </div>
-
-          <div className="space-y-2">
-            {filteredTransactions.map((transaction, index) => (
-              <motion.div
-                key={`${transaction.voucherNumber}-${index}`}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-300 hover:shadow-md transition-all duration-200"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <FileText className="w-4 h-4 text-blue-600" />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900">{transaction.voucherNumber}</h4>
-                      <p className="text-sm text-gray-600">{transaction.voucherType}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-lg text-gray-900">{formatCurrency(transaction.amount)}</p>
-                    <p className="text-sm text-gray-500">{transaction.date}</p>
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-100 pt-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">Party:</span>
-                    <span className="text-sm text-gray-900">{transaction.partyName}</span>
-                  </div>
-                  
-                  {transaction.ledgerEntries.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Ledger Entries:</p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {transaction.ledgerEntries.map((entry, entryIndex) => (
-                          <div key={entryIndex} className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded">
-                            <span className="text-gray-700 truncate">{entry.ledgerName}</span>
-                            <span className={`font-medium ${entry.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {formatCurrency(entry.amount)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {transaction.inventoryEntries && transaction.inventoryEntries.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Inventory Items:</p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {transaction.inventoryEntries.map((entry, entryIndex) => (
-                          <div key={entryIndex} className="flex items-center justify-between text-xs bg-blue-50 p-2 rounded">
-                            <div className="flex-1 truncate">
-                              <span className="text-gray-700 font-medium">{entry.stockName}</span>
-                              {entry.quantity > 0 && (
-                                <span className="text-gray-500 ml-2">
-                                  {entry.quantity}{entry.unit ? ` ${entry.unit}` : ''}
-                                  {entry.rate > 0 && ` @ ${formatCurrency(entry.rate)}`}
-                                </span>
-                              )}
-                            </div>
-                            <span className="font-medium text-blue-600 ml-2">
-                              {formatCurrency(entry.amount)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
+          ))}
         </div>
-      ) : transactions.length === 0 && !loading && !error ? (
-        <div className="text-center py-12">
-          <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Transactions</h3>
-          <p className="text-gray-600">Click "Fetch Transactions" to load voucher data for the selected date range.</p>
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 
-  return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex-shrink-0 bg-white border-b border-gray-200 p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <motion.button
-              whileHover={{ x: -2 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={onBack}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors mr-4"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to List
-            </motion.button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{ledger.name}</h1>
-              <p className="text-gray-600">Ledger Details & Transactions</p>
+  // ── Transactions tab ───────────────────────────────────────────────────
+  const renderTransactions = () => (
+    <div className="space-y-4">
+      {/* Period indicator — global period set at the top bar */}
+      <div className="flex items-center justify-between bg-white rounded-2xl border border-gray-200 px-4 py-3">
+        <div>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Period</p>
+          <p className="text-sm font-bold text-teal-700 mt-0.5">{dateRange.label || 'All Time'}</p>
+        </div>
+        <button
+          onClick={() => runFetch()}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-teal-50 text-teal-700 text-xs font-semibold disabled:opacity-50 active:bg-teal-100"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          {loading ? 'Loading…' : 'Refresh'}
+        </button>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="flex items-start gap-3 bg-red-50 rounded-2xl px-4 py-3">
+          <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+          <p className="text-sm text-red-700 flex-1 leading-relaxed">{error}</p>
+          <button onClick={() => setError(null)}>
+            <X className="w-4 h-4 text-red-400" />
+          </button>
+        </div>
+      )}
+
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-50 overflow-hidden">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3.5 animate-pulse">
+              <div className="h-10 w-10 rounded-xl bg-gray-200 shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-3 bg-gray-200 rounded w-2/3" />
+                <div className="h-2.5 bg-gray-100 rounded w-1/3" />
+              </div>
+              <div className="h-3 bg-gray-200 rounded w-16 shrink-0" />
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty */}
+      {!loading && transactions.length === 0 && !error && (
+        <div className="flex flex-col items-center gap-3 py-14">
+          <div className="h-14 w-14 bg-gray-100 rounded-2xl flex items-center justify-center">
+            <FileText className="w-7 h-7 text-gray-300" />
           </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-600">Current Balance</p>
-            <p className={`text-2xl font-bold ${getBalanceColor(ledger.closingBalance)}`}>
+          <p className="text-sm text-gray-500 text-center max-w-[240px]">
+            No transactions found for the selected period
+          </p>
+        </div>
+      )}
+
+      {/* Results */}
+      {!loading && transactions.length > 0 && (
+        <>
+          <div className="flex items-center gap-3 px-1">
+            <span className="text-xs font-semibold text-gray-900">{transactions.length} vouchers</span>
+            {typeFilter !== 'all' && (
+              <span className="text-xs text-teal-600">{filteredTx.length} shown</span>
+            )}
+          </div>
+
+          {/* Type filter pills */}
+          {voucherTypes.length > 2 && (
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {voucherTypes.map(type => (
+                <button
+                  key={type}
+                  onClick={() => setTypeFilter(type)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-colors ${
+                    typeFilter === type ? 'bg-teal-600 text-white' : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {type === 'all' ? 'All Types' : type}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search party, voucher no…"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-9 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            )}
+          </div>
+
+          {filteredTx.length === 0 ? (
+            <div className="text-center py-10 text-sm text-gray-400">No results</div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-50 overflow-hidden">
+              {filteredTx.map((tx, idx) => {
+                const txKey    = `${tx.voucherNumber}-${idx}`;
+                const expanded = expandedTx === txKey;
+                const color    = getAvatarColor(tx.partyName || tx.voucherType);
+                const initial  = (tx.partyName || tx.voucherType)?.[0]?.toUpperCase() ?? '?';
+                const hasLedger = (tx.ledgerEntries?.length ?? 0) > 0;
+                const hasInv    = (tx.inventoryEntries?.length ?? 0) > 0;
+
+                return (
+                  <div key={txKey}>
+                    {/* Row */}
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-teal-50 transition-colors"
+                      onClick={() => setExpandedTx(expanded ? null : txKey)}
+                    >
+                      <div className={`h-10 w-10 rounded-xl ${color} flex items-center justify-center shrink-0`}>
+                        <span className="text-white font-bold text-sm">{initial}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-800 text-[13px] leading-tight truncate">
+                          {tx.partyName && tx.partyName !== 'Unknown' ? tx.partyName : tx.voucherType}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-500 shrink-0">
+                            {tx.voucherType}
+                          </span>
+                          <span className="text-[11px] text-gray-400">{tx.date}</span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0 mr-1">
+                        <p className="text-sm font-bold text-gray-900">{formatCurrency(tx.amount)}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[80px]">
+                          {tx.voucherNumber || '—'}
+                        </p>
+                      </div>
+                      {expanded
+                        ? <ChevronUp   className="h-4 w-4 text-teal-500 shrink-0" />
+                        : <ChevronDown className="h-4 w-4 text-gray-300 shrink-0" />}
+                    </button>
+
+                    {/* Expanded detail */}
+                    {expanded && (
+                      <div className="px-4 pb-4 bg-teal-50/40 space-y-3 border-t border-teal-100">
+                        {/* Summary */}
+                        <div className="flex items-center justify-between pt-3 pb-1">
+                          <div>
+                            <p className="text-xs font-semibold text-teal-700">{tx.voucherType}</p>
+                            <p className="text-[11px] text-gray-500">{tx.voucherNumber} · {tx.date}</p>
+                          </div>
+                          <p className="text-sm font-bold text-teal-700">{formatCurrency(tx.amount)}</p>
+                        </div>
+
+                        {/* Ledger entries */}
+                        {hasLedger && (
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <CreditCard className="w-3.5 h-3.5 text-gray-400" />
+                              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                                Ledger Entries ({tx.ledgerEntries.length})
+                              </p>
+                            </div>
+                            <div className="space-y-1.5">
+                              {tx.ledgerEntries.map((e, ei) => (
+                                <div key={ei} className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 border border-gray-100 gap-2">
+                                  <span className="text-xs text-gray-700 flex-1 leading-tight">{e.ledgerName}</span>
+                                  <div className="text-right shrink-0">
+                                    <span className={`text-xs font-bold ${e.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {formatCurrency(e.amount)}
+                                    </span>
+                                    <p className="text-[9px] text-gray-400">{e.amount >= 0 ? 'Dr' : 'Cr'}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Inventory entries */}
+                        {hasInv && (
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <Package className="w-3.5 h-3.5 text-gray-400" />
+                              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+                                Stock Items ({tx.inventoryEntries.length})
+                              </p>
+                            </div>
+                            <div className="space-y-1.5">
+                              {tx.inventoryEntries.map((e, ei) => (
+                                <div key={ei} className="flex items-center gap-2 bg-white rounded-xl px-3 py-2.5 border border-gray-100">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-gray-700 truncate">{e.stockName}</p>
+                                    {e.quantity > 0 && (
+                                      <p className="text-[10px] text-gray-400 mt-0.5">
+                                        {e.quantity}{e.unit ? ` ${e.unit}` : ''}
+                                        {e.rate > 0 ? ` @ ${formatCurrency(e.rate)}` : ''}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <span className="text-xs font-bold text-teal-600 shrink-0">
+                                    {formatCurrency(e.amount)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* No entries fallback */}
+                        {!hasLedger && !hasInv && (
+                          <div className="bg-white rounded-xl px-4 py-3 border border-gray-100 text-center">
+                            <p className="text-xs text-gray-400">No detailed entries returned by Tally</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────
+  return (
+    <div className="flex flex-col h-full overflow-hidden bg-gray-50">
+
+      {/* Header */}
+      <div className="flex-shrink-0 bg-white border-b border-gray-100 px-4 sm:px-6 py-3">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="h-9 w-9 flex items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 active:bg-gray-100 shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-base sm:text-xl font-bold text-gray-900 truncate leading-tight">
+              {ledger.name}
+            </h1>
+            <p className="text-xs text-gray-400 truncate">{ledger.parent || 'No group'}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className={`text-base sm:text-lg font-bold ${isPos ? 'text-green-600' : isNeg ? 'text-red-600' : 'text-gray-600'}`}>
               {formatCurrency(ledger.closingBalance)}
             </p>
+            <p className="text-[10px] text-gray-400">{isNeg ? 'Cr' : 'Dr'}</p>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex space-x-1 mt-6">
-          {[
-            { id: 'details', label: 'Details', icon: Building },
-            { id: 'transactions', label: 'Transactions', icon: FileText }
-          ].map((tab) => (
-            <motion.button
-              key={tab.id}
-              whileHover={{ y: -1 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => setActiveTab(tab.id as 'details' | 'transactions')}
-              className={`inline-flex items-center px-6 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                activeTab === tab.id
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+        <div className="mt-3 bg-gray-100 rounded-2xl p-1 flex gap-0.5">
+          {([
+            ['details',      Building2, 'Details'],
+            ['transactions', FileText,  'Transactions'],
+          ] as [string, React.ElementType, string][]).map(([id, Icon, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveTab(id as 'details' | 'transactions')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-colors ${
+                activeTab === id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'
               }`}
             >
-              <tab.icon className="w-4 h-4 mr-2" />
-              {tab.label}
-            </motion.button>
+              <Icon className="w-3.5 h-3.5" />
+              {label}
+            </button>
           ))}
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            {activeTab === 'details' ? renderDetailsTab() : renderTransactionsTab()}
-          </motion.div>
-        </AnimatePresence>
+      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+        {activeTab === 'details' ? renderDetails() : renderTransactions()}
       </div>
     </div>
   );

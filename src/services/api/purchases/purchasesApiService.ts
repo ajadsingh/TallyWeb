@@ -1,4 +1,5 @@
 import BaseApiService from '../baseApiService';
+import AppConfigService from '../../config/appConfig';
 
 export type DateRangeOption = 
   | 'last7days'
@@ -216,35 +217,51 @@ export class PurchasesApiService extends BaseApiService {
       throw new Error('No company selected. Please select a company first.');
     }
 
-    const { fromDate, toDate } = this.getDateRange(dateRangeOption, customFromDate, customToDate);
-    
-    const fromDateStr = this.formatDateForTally(fromDate);
-    const toDateStr = this.formatDateForTally(toDate);
-    
-    // TDL-based query for Purchase vouchers
+    // Compute date strings — if no dates provided → all-time (no date filter)
+    let fromDateStr = '';
+    let toDateStr   = '';
+    if (customFromDate && customToDate) {
+      fromDateStr = this.formatDateForTally(customFromDate);
+      toDateStr   = this.formatDateForTally(customToDate);
+    } else if (dateRangeOption !== 'custom') {
+      const { fromDate, toDate } = this.getDateRange(dateRangeOption);
+      fromDateStr = this.formatDateForTally(fromDate);
+      toDateStr   = this.formatDateForTally(toDate);
+    }
+
+    // Build filter — extend with any custom voucher type names from settings
+    const customPurchaseTypes = AppConfigService.getInstance().getCustomPurchaseTypes();
+    const extraFilter = customPurchaseTypes
+      .map(t => `($VOUCHERTYPENAME = "${t.replace(/"/g, '&quot;')}")` )
+      .join(' OR ');
+    const purchaseFilterFormula = extraFilter
+      ? `$$IsPurchase:$VOUCHERTYPENAME OR ${extraFilter}`
+      : `$$IsPurchase:$VOUCHERTYPENAME`;
+
     const xmlRequest = `<ENVELOPE>
   <HEADER>
     <VERSION>1</VERSION>
-    <TALLYREQUEST>EXPORT</TALLYREQUEST>
-    <TYPE>COLLECTION</TYPE>
-    <ID>Purchase Vouchers</ID>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>PurchaseVouchers</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>
         <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
-        <SVFROMDATE TYPE="DATE">${fromDateStr}</SVFROMDATE>
-        <SVTODATE TYPE="DATE">${toDateStr}</SVTODATE>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        ${fromDateStr ? `<SVFROMDATE TYPE="Date">${fromDateStr}</SVFROMDATE>` : ''}
+        ${toDateStr   ? `<SVTODATE   TYPE="Date">${toDateStr}</SVTODATE>`   : ''}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
-          <COLLECTION NAME="Purchase Vouchers" ISMODIFY="No" ISFIXED="No" ISINITIALIZE="Yes" ISOPTION="No" ISINTERNAL="No">
+          <COLLECTION NAME="PurchaseVouchers">
             <TYPE>Voucher</TYPE>
-            <FETCH>DATE, VOUCHERNUMBER, PARTYLEDGERNAME, AMOUNT, VOUCHERTYPENAME, GUID, VCHTYPE, REFERENCE, NARRATION</FETCH>
-            <FILTER>PurchaseVouchersOnly</FILTER>
+            <FETCH>DATE, VOUCHERNUMBER, PARTYLEDGERNAME, VOUCHERTYPENAME, AMOUNT, GUID, REFERENCE, NARRATION</FETCH>
+            <FETCH>ALLLEDGERENTRIES.LIST : LEDGERNAME, AMOUNT, GSTRATE</FETCH>
+            <FETCH>ALLINVENTORYENTRIES.LIST : STOCKITEMNAME, ACTUALQTY, BILLEDQTY, RATE, AMOUNT, GSTHSNNAME</FETCH>
+            <FILTER>PurchaseFilter</FILTER>
           </COLLECTION>
-          <SYSTEM TYPE="Formulae" NAME="PurchaseVouchersOnly">$$IsPurchase:$VOUCHERTYPE</SYSTEM>
+          <SYSTEM TYPE="Formulae" NAME="PurchaseFilter">${purchaseFilterFormula}</SYSTEM>
         </TDLMESSAGE>
       </TDL>
     </DESC>
@@ -261,171 +278,132 @@ export class PurchasesApiService extends BaseApiService {
   }
 
   /**
-   * Parse purchase vouchers XML response 
+   * Parse purchase vouchers XML response.
+   * Uses getElementsByTagName throughout — querySelector won't match dotted XML tag
+   * names like ALLLEDGERENTRIES.LIST reliably in XML mode.
    */
   private parsePurchaseVouchersResponse(xmlText: string): PurchaseVoucher[] {
     try {
       const cleanedXml = this.cleanXmlForParsing(xmlText);
       const doc = this.parseXML(cleanedXml);
-      
-      const parserError = doc.querySelector('parsererror');
-      if (parserError) {
+
+      if (doc.getElementsByTagName('parsererror').length > 0) {
         throw new Error('XML parsing failed');
       }
-      
-      let vouchers = doc.querySelectorAll('VOUCHER');
-      
-      if (vouchers.length === 0) {
-        vouchers = doc.querySelectorAll('voucher');
-      }
+
+      const rawList = doc.getElementsByTagName('VOUCHER');
+      const voucherNodes = Array.from(
+        rawList.length > 0 ? rawList : doc.getElementsByTagName('voucher')
+      );
       
       const purchaseVouchers: PurchaseVoucher[] = [];
-      
-      vouchers.forEach((voucher, index) => {
+
+      voucherNodes.forEach((voucher, index) => {
         try {
-          const vchType = voucher.getAttribute('VCHTYPE') || 
-                         voucher.getAttribute('TYPE') ||
-                         voucher.querySelector('VOUCHERTYPENAME')?.textContent ||
-                         voucher.querySelector('VOUCHERTYPE')?.textContent ||
-                         '';
-          
-          const dateElement = voucher.querySelector('DATE');
-          const date = dateElement?.textContent || '';
-          
-          const voucherNumberElement = voucher.querySelector('VOUCHERNUMBER');
-          const voucherNumber = voucherNumberElement?.textContent || '';
-          
-          const partyNameElement = voucher.querySelector('PARTYLEDGERNAME');
-          const partyName = partyNameElement?.textContent || '';
-          
-          const amountElement = voucher.querySelector('AMOUNT');
-          let amountText = amountElement?.textContent || '0';
-          
+          // Helper: get first matching child text content
+          const gt = (tag: string) =>
+            voucher.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
+
+          const vchType =
+            voucher.getAttribute('VCHTYPE') ||
+            voucher.getAttribute('TYPE') ||
+            gt('VOUCHERTYPENAME') ||
+            gt('VOUCHERTYPE') ||
+            '';
+
+          const date          = gt('DATE');
+          const voucherNumber = gt('VOUCHERNUMBER');
+          const partyName     = gt('PARTYLEDGERNAME');
+
+          // Amount — fall back to summing ledger entries if top-level is missing
+          let amountText = gt('AMOUNT');
           if (!amountText || amountText === '0') {
-            const ledgerEntries = voucher.querySelectorAll('ALLLEDGERENTRIES.LIST');
-            let totalAmount = 0;
-            ledgerEntries.forEach(entry => {
-              const entryAmount = entry.querySelector('AMOUNT')?.textContent;
-              if (entryAmount) {
-                totalAmount += Math.abs(parseFloat(entryAmount) || 0);
-              }
+            let total = 0;
+            Array.from(voucher.getElementsByTagName('ALLLEDGERENTRIES.LIST')).forEach(e => {
+              total += Math.abs(parseFloat(e.getElementsByTagName('AMOUNT')[0]?.textContent || '0') || 0);
             });
-            if (totalAmount > 0) {
-              amountText = totalAmount.toString();
-            }
+            if (total > 0) amountText = String(total);
           }
-          
           const amount = Math.abs(parseFloat(amountText) || 0);
-          
-          if (!date && !voucherNumber && !partyName && amount === 0) {
-            return;
-          }
-          
-          const guidElement = voucher.querySelector('GUID');
-          const guid = guidElement?.textContent || '';
-          
-          const referenceElement = voucher.querySelector('REFERENCE');
-          const reference = referenceElement?.textContent || '';
-          
-          const narrationElement = voucher.querySelector('NARRATION');
-          const narration = narrationElement?.textContent || '';
-          
-          const remoteid = voucher.getAttribute('REMOTEID') || '';
-          const vchkey = voucher.getAttribute('VCHKEY') || '';
-          
-          // Extract inventory details
+
+          if (!date && !voucherNumber && !partyName && amount === 0) return;
+
+          const guid      = gt('GUID');
+          const reference = gt('REFERENCE');
+          const narration = gt('NARRATION');
+          const remoteid  = voucher.getAttribute('REMOTEID') ?? '';
+          const vchkey    = voucher.getAttribute('VCHKEY') ?? '';
+
+          // ── Inventory entries ──────────────────────────────────────────
           const stockItems: StockItem[] = [];
           let totalDiscount = 0;
-          const inventoryElements = voucher.querySelectorAll('ALLINVENTORYENTRIES\\.LIST');
-          
-          inventoryElements.forEach(entry => {
-            const stockItemName = entry.querySelector('STOCKITEMNAME')?.textContent || '';
-            const actualQty = entry.querySelector('ACTUALQTY')?.textContent || '';
-            const billedQty = entry.querySelector('BILLEDQTY')?.textContent || '';
-            const rate = entry.querySelector('RATE')?.textContent || '';
-            const itemAmount = Math.abs(parseFloat(entry.querySelector('AMOUNT')?.textContent || '0'));
-            const hsnCode = entry.querySelector('GSTHSNNAME')?.textContent || '';
-            
-            const rateValue = parseFloat(rate?.replace(/[^\d.-]/g, '') || '0');
-            const qtyValue = parseFloat(billedQty?.replace(/[^\d.-]/g, '') || '0');
-            const grossAmount = rateValue * qtyValue;
-            const itemDiscount = grossAmount > 0 ? grossAmount - itemAmount : 0;
-            const discountPercent = grossAmount > 0 ? (itemDiscount / grossAmount) * 100 : 0;
-            
+          Array.from(voucher.getElementsByTagName('ALLINVENTORYENTRIES.LIST')).forEach(entry => {
+            const egt = (tag: string) =>
+              entry.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
+            const stockItemName = egt('STOCKITEMNAME');
+            const actualQty     = egt('ACTUALQTY');
+            const billedQty     = egt('BILLEDQTY');
+            const rate          = egt('RATE');
+            const hsnCode       = egt('GSTHSNNAME');
+            const itemAmount    = Math.abs(parseFloat(egt('AMOUNT')) || 0);
+            const rateValue     = parseFloat(rate.replace(/[^\d.-]/g, '') || '0');
+            const qtyValue      = parseFloat(billedQty.replace(/[^\d.-]/g, '') || '0');
+            const grossAmount   = rateValue * qtyValue;
+            const itemDiscount  = grossAmount > 0 ? grossAmount - itemAmount : 0;
             totalDiscount += itemDiscount;
-            
             if (stockItemName) {
               stockItems.push({
                 name: stockItemName,
-                rate: rate,
-                actualQty: actualQty,
-                billedQty: billedQty,
+                rate,
+                actualQty,
+                billedQty,
                 amount: itemAmount,
                 hsn: hsnCode,
                 discount: itemDiscount,
-                discountPercent: discountPercent
+                discountPercent: grossAmount > 0 ? (itemDiscount / grossAmount) * 100 : 0,
               });
             }
           });
-          
-          // Extract GST breakdown
+
+          // ── Ledger entries (GST breakdown) ─────────────────────────────
           let cgst = 0, sgst = 0, igst = 0;
           let cgstRate = 0, sgstRate = 0, igstRate = 0;
-          
-          const ledgerEntries = voucher.querySelectorAll('ALLLEDGERENTRIES\\.LIST');
-          ledgerEntries.forEach(entry => {
-            const ledgerName = entry.querySelector('LEDGERNAME')?.textContent?.toLowerCase() || '';
-            const entryAmount = Math.abs(parseFloat(entry.querySelector('AMOUNT')?.textContent || '0'));
-            const gstRate = parseFloat(entry.querySelector('GSTRATE')?.textContent || '0');
-            
-            if (ledgerName.includes('cgst')) {
-              cgst += entryAmount;
-              cgstRate = gstRate;
-            } else if (ledgerName.includes('sgst')) {
-              sgst += entryAmount;
-              sgstRate = gstRate;
-            } else if (ledgerName.includes('igst')) {
-              igst += entryAmount;
-              igstRate = gstRate;
-            }
+          Array.from(voucher.getElementsByTagName('ALLLEDGERENTRIES.LIST')).forEach(entry => {
+            const lName = (entry.getElementsByTagName('LEDGERNAME')[0]?.textContent ?? '').toLowerCase();
+            const lAmt  = Math.abs(parseFloat(entry.getElementsByTagName('AMOUNT')[0]?.textContent || '0') || 0);
+            const lRate = parseFloat(entry.getElementsByTagName('GSTRATE')[0]?.textContent || '0') || 0;
+            if      (lName.includes('cgst')) { cgst += lAmt; cgstRate = lRate; }
+            else if (lName.includes('sgst')) { sgst += lAmt; sgstRate = lRate; }
+            else if (lName.includes('igst')) { igst += lAmt; igstRate = lRate; }
           });
-          
-          const totalTax = cgst + sgst + igst;
+
+          const totalTax      = cgst + sgst + igst;
           const taxableAmount = amount - totalTax;
-          
+
           purchaseVouchers.push({
             id: guid || `${voucherNumber}-${index}`,
-            voucherNumber: voucherNumber,
-            date: date,
-            partyName: partyName,
-            amount: amount,
-            narration: narration,
-            reference: reference,
-            guid: guid,
+            voucherNumber,
+            date: this.formatTallyDate(date),
+            partyName,
+            amount,
+            narration,
+            reference,
+            guid,
             alterid: remoteid,
             voucherType: vchType,
             voucherRetainKey: vchkey,
-            stockItems: stockItems,
-            taxableAmount: taxableAmount,
-            totalTax: totalTax,
+            stockItems,
+            taxableAmount,
+            totalTax,
             itemCount: stockItems.length,
-            totalDiscount: totalDiscount,
-            gstBreakdown: {
-              cgst,
-              sgst,
-              igst,
-              cgstRate,
-              sgstRate,
-              igstRate,
-              total: totalTax
-            }
+            totalDiscount,
+            gstBreakdown: { cgst, sgst, igst, cgstRate, sgstRate, igstRate, total: totalTax },
           });
-          
-        } catch (error) {
-          console.error(`Error parsing purchase voucher at index ${index}:`, error);
+        } catch (e) {
+          console.error(`Error parsing purchase voucher at index ${index}:`, e);
         }
       });
-      
+
       return purchaseVouchers;
     } catch (error) {
       console.error('Error parsing purchase vouchers response:', error);
@@ -453,13 +431,24 @@ export class PurchasesApiService extends BaseApiService {
   }
 
   /**
-   * Format date for Tally (YYYYMMDD format)
+   * Format date for Tally request (YYYYMMDD format)
    */
   private formatDateForTally(date: Date): string {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}${month}${day}`;
+  }
+
+  /**
+   * Format Tally date (YYYYMMDD) to ISO YYYY-MM-DD
+   */
+  private formatTallyDate(tallyDate: string): string {
+    if (!tallyDate || tallyDate.length !== 8) return tallyDate;
+    const year  = tallyDate.substring(0, 4);
+    const month = tallyDate.substring(4, 6);
+    const day   = tallyDate.substring(6, 8);
+    return `${year}-${month}-${day}`;
   }
 }
 

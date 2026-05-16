@@ -56,26 +56,23 @@ class InventoryApiService extends BaseApiService {
       }
     }
 
-    // Calculate skip count for pagination
-    const skipCount = (page - 1) * pageSize;
-
     const xmlPayload = `
       <ENVELOPE>
         <HEADER>
           <VERSION>1</VERSION>
           <TALLYREQUEST>Export</TALLYREQUEST>
           <TYPE>Collection</TYPE>
-          <ID>StockItem</ID>
+          <ID>AllStockItems</ID>
         </HEADER>
         <BODY>
           <DESC>
             <STATICVARIABLES>
               <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-              <SVCurrentCompany>${companyName}</SVCurrentCompany>
+              <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
             </STATICVARIABLES>
             <TDL>
               <TDLMESSAGE>
-                <COLLECTION NAME="StockItem" MAXLINES="${pageSize}" SKIP="${skipCount}">
+                <COLLECTION NAME="AllStockItems">
                   <TYPE>StockItem</TYPE>
                   <FETCH>NAME</FETCH>
                   <FETCH>BASEUNITS</FETCH>
@@ -85,7 +82,6 @@ class InventoryApiService extends BaseApiService {
                   <FETCH>CLOSINGVALUE</FETCH>
                   <FETCH>STANDARDCOST</FETCH>
                   <FETCH>STANDARDPRICE</FETCH>
-                  <SCROLLED>Yes</SCROLLED>
                   ${searchTerm ? `<FILTER>StockItemFilter</FILTER>` : ''}
                 </COLLECTION>
                 ${searchTerm ? `
@@ -139,7 +135,7 @@ class InventoryApiService extends BaseApiService {
           <DESC>
             <STATICVARIABLES>
               <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-              <SVCurrentCompany>${companyName}</SVCurrentCompany>
+              <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
             </STATICVARIABLES>
             <TDL>
               <TDLMESSAGE>

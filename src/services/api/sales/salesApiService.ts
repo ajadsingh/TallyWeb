@@ -1,4 +1,5 @@
 import BaseApiService from '../baseApiService';
+import AppConfigService from '../../config/appConfig';
 
 export type DateRangeOption = 
   | 'last7days'
@@ -141,29 +142,31 @@ export class SalesApiService extends BaseApiService {
     
     // Extract inventory entries (items)
     const inventoryEntries: any[] = [];
-    const inventoryElements = voucherElement.querySelectorAll('ALLINVENTORYENTRIES\\.LIST');
+    const inventoryElements = Array.from(voucherElement.getElementsByTagName('ALLINVENTORYENTRIES.LIST'));
     
     inventoryElements.forEach(entry => {
-      const stockItemName = entry.querySelector('STOCKITEMNAME')?.textContent || '';
-      const actualQty = entry.querySelector('ACTUALQTY')?.textContent || '';
-      const billedQty = entry.querySelector('BILLEDQTY')?.textContent || '';
-      const rate = entry.querySelector('RATE')?.textContent || '';
-      const itemAmount = Math.abs(parseFloat(entry.querySelector('AMOUNT')?.textContent || '0'));
-      const hsnCode = entry.querySelector('GSTHSNNAME')?.textContent || '';
-      const taxability = entry.querySelector('GSTOVRDNTAXABILITY')?.textContent || '';
-      const typeOfSupply = entry.querySelector('GSTOVRDNTYPEOFSUPPLY')?.textContent || '';
+      const eg = (tag: string) => entry.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
+      const stockItemName = eg('STOCKITEMNAME');
+      const actualQty     = eg('ACTUALQTY');
+      const billedQty     = eg('BILLEDQTY');
+      const rate          = eg('RATE');
+      const itemAmount    = Math.abs(parseFloat(eg('AMOUNT')) || 0);
+      const hsnCode       = eg('GSTHSNNAME');
+      const taxability    = eg('GSTOVRDNTAXABILITY');
+      const typeOfSupply  = eg('GSTOVRDNTYPEOFSUPPLY');
       
       // Extract GST rates from RATEDETAILS.LIST
-      const rateDetails = entry.querySelectorAll('RATEDETAILS\\.LIST');
+      const rateDetails = Array.from(entry.getElementsByTagName('RATEDETAILS.LIST'));
       let cgstRate = 0, sgstRate = 0, igstRate = 0;
       
       rateDetails.forEach(rateDetail => {
-        const dutyHead = rateDetail.querySelector('GSTRATEDUTYHEAD')?.textContent || '';
-        const rate = parseFloat(rateDetail.querySelector('GSTRATE')?.textContent || '0');
+        const rg = (tag: string) => rateDetail.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
+        const dutyHead = rg('GSTRATEDUTYHEAD');
+        const gstRate  = parseFloat(rg('GSTRATE') || '0');
         
-        if (dutyHead === 'CGST') cgstRate = rate;
-        else if (dutyHead === 'SGST/UTGST') sgstRate = rate;
-        else if (dutyHead === 'IGST') igstRate = rate;
+        if (dutyHead === 'CGST') cgstRate = gstRate;
+        else if (dutyHead === 'SGST/UTGST') sgstRate = gstRate;
+        else if (dutyHead === 'IGST') igstRate = gstRate;
       });
       
       if (stockItemName) {
@@ -316,33 +319,51 @@ export class SalesApiService extends BaseApiService {
       throw new Error('No company selected. Please select a company first.');
     }
 
-    const { fromDate, toDate, label } = this.getDateRange(dateRangeOption, customFromDate, customToDate);
-    
-    const fromDateStr = this.formatDateForTally(fromDate);
-    const toDateStr = this.formatDateForTally(toDate);
-    
-    // Use the proven TDL-based query that works (same as original working query)
+    // Compute date strings — if no dates provided → all-time (no date filter)
+    let fromDateStr = '';
+    let toDateStr   = '';
+    if (customFromDate && customToDate) {
+      fromDateStr = this.formatDateForTally(customFromDate);
+      toDateStr   = this.formatDateForTally(customToDate);
+    } else if (dateRangeOption !== 'custom') {
+      const { fromDate, toDate } = this.getDateRange(dateRangeOption);
+      fromDateStr = this.formatDateForTally(fromDate);
+      toDateStr   = this.formatDateForTally(toDate);
+    }
+
+    // Build filter — extend with any custom voucher type names from settings
+    const customSalesTypes = AppConfigService.getInstance().getCustomSalesTypes();
+    const extraSalesFilter = customSalesTypes
+      .map(t => `($VOUCHERTYPENAME = "${t.replace(/"/g, '&quot;')}")`)
+      .join(' OR ');
+    const salesFilterFormula = extraSalesFilter
+      ? `$$IsSales:$VOUCHERTYPENAME OR ${extraSalesFilter}`
+      : `$$IsSales:$VOUCHERTYPENAME`;
+
     const xmlRequest = `<ENVELOPE>
   <HEADER>
     <VERSION>1</VERSION>
-    <TALLYREQUEST>EXPORT</TALLYREQUEST>
-    <TYPE>COLLECTION</TYPE>
-    <ID>Sales Vouchers</ID>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>SalesVouchers</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>
         <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
-        <SVFROMDATE TYPE="DATE">${fromDateStr}</SVFROMDATE>
-        <SVTODATE TYPE="DATE">${toDateStr}</SVTODATE>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        ${fromDateStr ? `<SVFROMDATE TYPE="Date">${fromDateStr}</SVFROMDATE>` : ''}
+        ${toDateStr   ? `<SVTODATE   TYPE="Date">${toDateStr}</SVTODATE>`   : ''}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
-          <COLLECTION NAME="Sales Vouchers" ISMODIFY="No" ISFIXED="No" ISINITIALIZE="Yes" ISOPTION="No" ISINTERNAL="No">
+          <COLLECTION NAME="SalesVouchers">
             <TYPE>Voucher</TYPE>
-            <FETCH>DATE, VOUCHERNUMBER, PARTYLEDGERNAME, AMOUNT, VOUCHERTYPENAME, GUID, VCHTYPE</FETCH>
+            <FETCH>DATE, VOUCHERNUMBER, PARTYLEDGERNAME, VOUCHERTYPENAME, AMOUNT, GUID, REFERENCE, NARRATION</FETCH>
+            <FETCH>ALLLEDGERENTRIES.LIST : LEDGERNAME, AMOUNT, GSTRATE</FETCH>
+            <FETCH>ALLINVENTORYENTRIES.LIST : STOCKITEMNAME, ACTUALQTY, BILLEDQTY, RATE, AMOUNT, GSTHSNNAME, DISCOUNT</FETCH>
+            <FILTER>SalesFilter</FILTER>
           </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="SalesFilter">${salesFilterFormula}</SYSTEM>
         </TDLMESSAGE>
       </TDL>
     </DESC>
@@ -447,10 +468,10 @@ export class SalesApiService extends BaseApiService {
           
           // If no AMOUNT element, try to get from ALLLEDGERENTRIES
           if (!amountText || amountText === '0') {
-            const ledgerEntries = voucher.querySelectorAll('ALLLEDGERENTRIES.LIST');
+            const ledgerEntries = voucher.getElementsByTagName('ALLLEDGERENTRIES.LIST');
             let totalAmount = 0;
-            ledgerEntries.forEach(entry => {
-              const entryAmount = entry.querySelector('AMOUNT')?.textContent;
+            Array.from(ledgerEntries).forEach(entry => {
+              const entryAmount = entry.getElementsByTagName('AMOUNT')[0]?.textContent;
               if (entryAmount) {
                 totalAmount += Math.abs(parseFloat(entryAmount) || 0);
               }
@@ -467,12 +488,6 @@ export class SalesApiService extends BaseApiService {
             return;
           }
           
-          // Filter for only Tax Invoice vouchers (exact match)
-          // Exclude Proforma Invoices and other non-sales vouchers
-          if (vchType !== 'Tax Invoice') {
-            return;
-          }
-          
           // Extract GUID for unique ID
           const guidElement = voucher.querySelector('GUID');
           const guid = guidElement?.textContent || '';
@@ -484,28 +499,27 @@ export class SalesApiService extends BaseApiService {
           // Extract inventory details (stock items) from ALLINVENTORYENTRIES.LIST
           const stockItems: StockItem[] = [];
           let totalDiscount = 0;
-          const inventoryElements = voucher.querySelectorAll('ALLINVENTORYENTRIES\\.LIST');
+          const inventoryElements = Array.from(voucher.getElementsByTagName('ALLINVENTORYENTRIES.LIST'));
           
           inventoryElements.forEach(entry => {
-            const stockItemName = entry.querySelector('STOCKITEMNAME')?.textContent || '';
-            const actualQty = entry.querySelector('ACTUALQTY')?.textContent || '';
-            const billedQty = entry.querySelector('BILLEDQTY')?.textContent || '';
-            const rate = entry.querySelector('RATE')?.textContent || '';
-            const itemAmount = Math.abs(parseFloat(entry.querySelector('AMOUNT')?.textContent || '0'));
-            const hsnCode = entry.querySelector('GSTHSNNAME')?.textContent || '';
-            
-            // Extract rate and quantity values for proper discount calculation
-            const rateValue = parseFloat(rate?.replace(/[^\d.-]/g, '') || '0');
-            const qtyValue = parseFloat(billedQty?.replace(/[^\d.-]/g, '') || '0');
+            const gt = (tag: string) => entry.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
+            const stockItemName = gt('STOCKITEMNAME');
+            const actualQty     = gt('ACTUALQTY');
+            const billedQty     = gt('BILLEDQTY');
+            const rate          = gt('RATE');
+            const itemAmount    = Math.abs(parseFloat(gt('AMOUNT')) || 0);
+            const hsnCode       = gt('GSTHSNNAME');
+            const discountPercent = parseFloat(gt('DISCOUNT') || '0');
+            const rateValue = parseFloat(rate.replace(/[^\d.-]/g, '') || '0');
+            const qtyValue  = parseFloat(billedQty.replace(/[^\d.-]/g, '') || '0');
             const grossAmount = rateValue * qtyValue;
-            const discountPercent = parseFloat(entry.querySelector('DISCOUNT')?.textContent || '0');
             const discountAmount = grossAmount > 0 ? (grossAmount * (discountPercent / 100)) : 0;
             if (stockItemName) {
               stockItems.push({
                 name: stockItemName,
-                rate: rate,
-                actualQty: actualQty,
-                billedQty: billedQty,
+                rate,
+                actualQty,
+                billedQty,
                 amount: itemAmount,
                 hsn: hsnCode || 'N/A',
                 discount: discountAmount > 0 ? Math.round(discountAmount * 100) / 100 : undefined,
@@ -514,8 +528,8 @@ export class SalesApiService extends BaseApiService {
               totalDiscount += discountAmount;
             }
           });
-          
-          // Extract GST breakdown from LEDGERENTRIES.LIST (not ALLLEDGERENTRIES.LIST)
+
+          // Extract GST breakdown from ALLLEDGERENTRIES.LIST
           const gstBreakdown: GSTBreakdown = {
             cgst: 0,
             sgst: 0,
@@ -523,11 +537,12 @@ export class SalesApiService extends BaseApiService {
             total: 0
           };
           let roundOff = 0;
-          
-          const ledgerEntries = voucher.querySelectorAll('LEDGERENTRIES\\.LIST');
+
+          const ledgerEntries = Array.from(voucher.getElementsByTagName('ALLLEDGERENTRIES.LIST'));
           ledgerEntries.forEach(entry => {
-            const ledgerName = entry.querySelector('LEDGERNAME')?.textContent || '';
-            const ledgerAmount = parseFloat(entry.querySelector('AMOUNT')?.textContent || '0');
+            const gt2 = (tag: string) => entry.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
+            const ledgerName   = gt2('LEDGERNAME');
+            const ledgerAmount = parseFloat(gt2('AMOUNT') || '0');
             
             // Extract GST amounts and rates
             if (ledgerName.toLowerCase().includes('cgst')) {
@@ -657,17 +672,10 @@ export class SalesApiService extends BaseApiService {
    */
   private formatTallyDate(tallyDate: string): string {
     if (!tallyDate || tallyDate.length !== 8) return tallyDate;
-    
-    const year = tallyDate.substring(0, 4);
+    const year  = tallyDate.substring(0, 4);
     const month = tallyDate.substring(4, 6);
-    const day = tallyDate.substring(6, 8);
-    
-    try {
-      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-      return date.toLocaleDateString('en-GB'); // DD/MM/YYYY format
-    } catch {
-      return tallyDate;
-    }
+    const day   = tallyDate.substring(6, 8);
+    return `${year}-${month}-${day}`;
   }
 }
 

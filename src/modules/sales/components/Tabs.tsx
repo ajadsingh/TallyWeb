@@ -32,7 +32,7 @@ interface TabsListProps {
 
 export const TabsList: React.FC<TabsListProps> = ({ className, children }) => {
   return (
-    <div className={`flex space-x-1 rounded-lg bg-gray-100 p-1 mb-6 ${className}`}>
+    <div className={`flex rounded-2xl bg-gray-100 p-1 mb-4 gap-0.5 overflow-x-auto scrollbar-hide ${className ?? ''}`}>
       {children}
     </div>
   );
@@ -54,10 +54,10 @@ export const TabsTrigger: React.FC<TabsTriggerProps> = ({ value, children, icon:
   return (
     <button
       onClick={() => setActiveTab(value)}
-      className={`flex-1 px-4 py-3 text-sm sm:text-base font-medium rounded-md transition-all duration-200 flex items-center justify-center gap-2 ${
+      className={`flex-1 min-w-[80px] px-3 sm:px-4 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 flex items-center justify-center gap-1.5 whitespace-nowrap ${
         isActive
-          ? 'bg-white text-blue-600 shadow-md'
-          : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50 hover:shadow-sm'
+          ? 'bg-white text-blue-600 shadow-sm'
+          : 'text-gray-500 hover:text-gray-700 active:bg-white/60'
       }`}
     >
       {Icon && <Icon className="w-5 h-5" />}

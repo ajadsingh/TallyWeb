@@ -10,7 +10,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/tally': {
-        target: 'http://192.168.1.20:9000',
+        target: 'http://localhost:9000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/tally/, ''),
         timeout: 120000, // 2 minutes timeout for Tally API

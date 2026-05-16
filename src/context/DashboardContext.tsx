@@ -122,7 +122,7 @@ export const DashboardProvider: React.FC<{
   useEffect(() => {
     // Fetch real data on component mount
     fetchFinancialOverview();
-  }, []);
+  }, [selectedCompany]);
 
   return (
     <DashboardContext.Provider value={{ data, loading, error, refreshData, selectedCompany }}>

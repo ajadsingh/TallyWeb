@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'; 
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from './shared/components/Sidebar';
+import DateRangeFilter from './shared/components/DateRangeFilter';
+import { GlobalDateRangeProvider, useGlobalDateRange } from './context/GlobalDateRangeContext';
 import Dashboard from './modules/dashboard/Dashboard';
 import SalesModule from './modules/sales/SalesModule';
 import PurchasesModule from './modules/purchases/PurchasesModule';
@@ -8,6 +10,9 @@ import InventoryModule from './modules/inventory/InventoryModule';
 import LedgerModule from './modules/ledger/LedgerModule';
 import CompanyModule from './modules/company/CompanyModule';
 import SettingsModule from './modules/settings/SettingsModule';
+import OutstandingModule from './modules/outstanding/OutstandingModule';
+import ExpensesModule from './modules/expenses/ExpensesModule';
+import ReportsModule from './modules/reports/ReportsModule';
 import { DashboardProvider } from './context/DashboardContext';
 import { CompanyProvider } from './context/CompanyContext';
 import CompanySelection from './components/CompanySelection';
@@ -33,6 +38,18 @@ const PlaceholderModule: React.FC<{ title: string; description: string }> = ({ t
     </div>
   </div>
 );
+
+const GlobalDateRangeBar: React.FC = () => {
+  const { setDateRange } = useGlobalDateRange();
+  return (
+    <DateRangeFilter
+      defaultKey="currentFY"
+      onChange={setDateRange}
+      accentColor="blue"
+      showAllTime
+    />
+  );
+};
 
 function App() {
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
@@ -127,24 +144,31 @@ function App() {
         selectedCompany ? (
           <CompanyProvider selectedCompany={selectedCompany} serverUrl={serverUrl || ''}>
             <DashboardProvider selectedCompany={selectedCompany} serverUrl={serverUrl}>
+              <GlobalDateRangeProvider>
               <div className="min-h-screen bg-gray-50 flex">
                 <Sidebar currentView={getCurrentView()} onViewChange={handleViewChange} onLogout={handleLogout} />
-                <main className="flex-1 transition-all duration-300 ml-0 lg:ml-16">
+                <main className="flex-1 transition-all duration-300 ml-0 lg:ml-16 pb-16 lg:pb-0">
+                  {/* Global date-range filter — one place, all modules react to it */}
+                  <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 overflow-x-auto scrollbar-hide">
+                    <GlobalDateRangeBar />
+                  </div>
                   <Routes>
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/sales" element={<SalesModule />} />
                     <Route path="/purchases" element={<PurchasesModule />} />
                     <Route path="/inventory" element={<InventoryModule />} />
-                    <Route path="/expenses" element={<PlaceholderModule title="Expenses" description="Track and manage your business expenses" />} />
-                    <Route path="/reports" element={<PlaceholderModule title="Reports" description="Generate comprehensive financial reports" />} />
+                    <Route path="/expenses" element={<ExpensesModule />} />
+                    <Route path="/reports" element={<ReportsModule />} />
                     <Route path="/gst" element={<PlaceholderModule title="GST Management" description="Handle GST calculations and filings" />} />
                     <Route path="/ledger" element={<LedgerModule serverUrl={serverUrl || ''} />} />
+                    <Route path="/outstanding" element={<OutstandingModule />} />
                     <Route path="/company" element={<CompanyModule />} />
                     <Route path="/settings/*" element={<SettingsModule />} />
                   </Routes>
                 </main>
               </div>
+              </GlobalDateRangeProvider>
             </DashboardProvider>
           </CompanyProvider>
         ) : (

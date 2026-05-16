@@ -23,6 +23,7 @@ interface MonthlySales {
 
 export const SalesAnalytics: React.FC<SalesAnalyticsProps> = ({
   salesVouchers,
+  currentRangeLabel,
   loading
 }) => {
   const analytics = useMemo(() => {
@@ -240,7 +241,7 @@ export const SalesAnalytics: React.FC<SalesAnalyticsProps> = ({
 
         {/* Monthly Sales Chart */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-2xl hover:border-emerald-300 transition-all duration-300">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">{analytics.financialYear} Monthly Sales Overview</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">{currentRangeLabel} — Monthly Breakdown</h3>
           <div className="space-y-3">
             {analytics.monthlySales.map((month) => (
               <div key={month.month} className="flex items-center justify-between">

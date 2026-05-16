@@ -17,6 +17,7 @@ interface MonthlyPurchases {
 
 const PurchaseAnalytics: React.FC<PurchaseAnalyticsProps> = ({
   purchaseVouchers,
+  currentRangeLabel,
   loading
 }) => {
   const analytics = useMemo(() => {
@@ -54,7 +55,7 @@ const PurchaseAnalytics: React.FC<PurchaseAnalyticsProps> = ({
     }
 
     purchaseVouchers.forEach(voucher => {
-      const [, month, year] = voucher.date.split('/');
+      const [year, month] = voucher.date.split('-');
       const voucherYear = parseInt(year);
       const voucherMonth = parseInt(month) - 1;
       
@@ -162,7 +163,7 @@ const PurchaseAnalytics: React.FC<PurchaseAnalyticsProps> = ({
 
       {/* Monthly Chart */}
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-2xl hover:border-purple-300 transition-all duration-300">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">{analytics.financialYear} Monthly Overview</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">{currentRangeLabel} — Monthly Breakdown</h3>
         <div className="space-y-3">
           {analytics.monthlyPurchases.map((month) => (
             <div key={month.month} className="flex items-center justify-between">

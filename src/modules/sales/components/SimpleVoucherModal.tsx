@@ -480,22 +480,33 @@ ${companyDetails?.name || companyDetails?.basiccompanyformalname || 'Your Compan
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg max-w-5xl w-full h-[95vh] flex flex-col overflow-hidden mx-4">
+    <div className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+      />
+
+      {/* Panel — full-height bottom sheet on mobile, centered dialog on sm+ */}
+      <div className="relative w-full sm:max-w-5xl sm:mx-4 sm:h-[95vh] h-[92vh] mt-auto sm:mt-0 bg-white sm:rounded-xl rounded-t-3xl flex flex-col overflow-hidden shadow-2xl">
+
+        {/* Mobile drag handle */}
+        <div className="sm:hidden flex justify-center pt-3 pb-1 shrink-0">
+          <div className="w-10 h-1 bg-gray-300 rounded-full" />
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 text-white flex-shrink-0">
-          <div>
-            <h2 className="text-xl font-semibold">Tax Invoice Details</h2>
-            <p className="text-blue-100">Voucher: {voucherNumber}</p>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-xl font-semibold leading-tight">Tax Invoice</h2>
+            <p className="text-blue-200 text-xs sm:text-sm truncate">{voucherNumber}</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="text-white hover:text-gray-200 transition-colors"
-            >
-              <X size={24} />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="ml-3 p-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white transition-colors shrink-0"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* Content */}
@@ -826,8 +837,8 @@ ${companyDetails?.name || companyDetails?.basiccompanyformalname || 'Your Compan
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between items-center p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-          <div className="flex items-center gap-4">
+        <div className="flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 bg-gray-50 shrink-0 gap-2">
+          <div className="flex items-center gap-2">
             {/* Only show export/share buttons when company details are loaded */}
             {companyDetails && !companyLoading && voucherDetail ? (
               <>
@@ -835,53 +846,54 @@ ${companyDetails?.name || companyDetails?.basiccompanyformalname || 'Your Compan
                 <button
                   onClick={handleExportPDF}
                   disabled={exporting}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                 >
                   {exporting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <FileText className="w-4 h-4" />
                   )}
-                  {exporting ? 'Generating...' : 'Export PDF'}
+                  <span className="hidden sm:inline">{exporting ? 'Generating…' : 'Export PDF'}</span>
+                  <span className="sm:hidden">PDF</span>
                 </button>
 
                 {/* Export Excel Button */}
                 <button
                   onClick={handleExportExcel}
                   disabled={excelLoading}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="hidden sm:flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
                 >
                   {excelLoading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <FileSpreadsheet className="w-4 h-4" />
                   )}
-                  {excelLoading ? 'Generating...' : 'Export Excel'}
+                  {excelLoading ? 'Generating…' : 'Export Excel'}
                 </button>
 
                 {/* Share Dropdown */}
                 <div className="relative">
                   <button
                     onClick={() => setShowShareDropdown(!showShareDropdown)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-sm font-medium"
                   >
                     <Share2 className="w-4 h-4" />
-                    Share
-                    <ChevronDown className="w-4 h-4" />
+                    <span className="hidden sm:inline">Share</span>
+                    <ChevronDown className="w-3.5 h-3.5" />
                   </button>
 
                   {showShareDropdown && (
-                    <div className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[150px]">
+                    <div className="absolute bottom-full mb-2 left-0 bg-white border border-gray-200 rounded-xl shadow-lg z-10 min-w-[150px] overflow-hidden">
                       <button
                         onClick={handleShareWhatsApp}
-                        className="flex items-center gap-2 w-full px-4 py-2 text-left hover:bg-green-50 text-green-700 border-b border-gray-100"
+                        className="flex items-center gap-2 w-full px-4 py-3 text-left hover:bg-green-50 text-green-700 border-b border-gray-100 text-sm font-medium"
                       >
                         <MessageCircle className="w-4 h-4" />
                         WhatsApp
                       </button>
                       <button
                         onClick={handleShareEmail}
-                        className="flex items-center gap-2 w-full px-4 py-2 text-left hover:bg-blue-50 text-blue-700"
+                        className="flex items-center gap-2 w-full px-4 py-3 text-left hover:bg-blue-50 text-blue-700 text-sm font-medium"
                       >
                         <Mail className="w-4 h-4" />
                         Email
@@ -891,15 +903,15 @@ ${companyDetails?.name || companyDetails?.basiccompanyformalname || 'Your Compan
                 </div>
               </>
             ) : (
-              <div className="text-sm text-gray-500">
-                {(loading || companyLoading) ? 'Loading...' : 'Export options will appear once data is loaded'}
+              <div className="text-xs text-gray-400">
+                {(loading || companyLoading) ? 'Loading…' : 'Export options will appear once data is loaded'}
               </div>
             )}
           </div>
 
           <button
             onClick={onClose}
-            className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            className="px-4 sm:px-6 py-2 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium"
           >
             Close
           </button>

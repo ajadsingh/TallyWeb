@@ -1,9 +1,10 @@
 import React from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, Server, Building2, HelpCircle, ArrowLeft, Phone, Mail, Book, Download, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Settings, Server, Building2, HelpCircle, ArrowLeft, Phone, Mail, Book, Download, CheckCircle, AlertTriangle, Tag } from 'lucide-react';
 import ServerSettings from './components/ServerSettings';
 import CompanySettings from './components/CompanySettings';
+import VoucherTypesSettings from './components/VoucherTypesSettings';
 
 interface SettingsOption {
   id: string;
@@ -38,6 +39,13 @@ const SettingsModule: React.FC = () => {
       description: 'Get help, documentation, and support resources',
       icon: <HelpCircle className="h-6 w-6" />,
       path: '/settings/help'
+    },
+    {
+      id: 'voucher-types',
+      title: 'Voucher Type Mapping',
+      description: 'Map custom Tally voucher type names so purchases & sales data loads correctly',
+      icon: <Tag className="h-6 w-6" />,
+      path: '/settings/voucher-types'
     }
   ];
 
@@ -267,6 +275,7 @@ const SettingsModule: React.FC = () => {
           <Route path="server" element={<ServerSettings />} />
           <Route path="company" element={<CompanySettings />} />
           <Route path="help" element={<HelpSupport />} />
+          <Route path="voucher-types" element={<VoucherTypesSettings />} />
         </Routes>
       </div>
     </motion.div>

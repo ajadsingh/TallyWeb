@@ -13,259 +13,212 @@ export interface FinancialOverview {
 
 export default class DashboardApiService extends BaseApiService {
 
-  // Get Cash Balance
+  /** Sum all Cash-group ledger closing balances */
   async getCashBalance(company: string): Promise<number> {
-    const xmlRequest = `
-<ENVELOPE>
+    const xml = `<ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>EXPORT</TALLYREQUEST>
-    <TYPE>Object</TYPE>
-    <ID>Ledg.Cash</ID>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>CashLedgers</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
         <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
       </STATICVARIABLES>
-      <FETCHLIST>
-        <FETCH>Name</FETCH>
-        <FETCH>ClosingBalance</FETCH>
-      </FETCHLIST>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="CashLedgers">
+            <TYPE>Ledger</TYPE>
+            <FETCH>Name</FETCH>
+            <FETCH>ClosingBalance</FETCH>
+            <FILTER>CashFilter</FILTER>
+          </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="CashFilter">$$IsCash:$Parent</SYSTEM>
+        </TDLMESSAGE>
+      </TDL>
     </DESC>
   </BODY>
 </ENVELOPE>`;
-
     try {
-      const xmlText = await this.makeRequest(xmlRequest);
-      
+      const xmlText = await this.makeRequest(xml);
       const xmlDoc = this.parseXML(xmlText);
-      const closingBalance = xmlDoc.querySelector('CLOSINGBALANCE')?.textContent || '0';
-      return this.parseAmount(closingBalance);
-    } catch (error) {
-      console.error('Failed to fetch cash balance:', error);
-      return 0;
-    }
+      let total = 0;
+      xmlDoc.querySelectorAll('LEDGER').forEach(node => {
+        total += Math.abs(this.parseAmount(node.querySelector('CLOSINGBALANCE')?.textContent || '0'));
+      });
+      return total;
+    } catch { return 0; }
   }
 
-  // Get Bank Balance
+  /** Sum all Bank-group ledger closing balances */
   async getBankBalance(company: string): Promise<number> {
-    const xmlRequest = `
-<ENVELOPE>
+    const xml = `<ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>EXPORT</TALLYREQUEST>
-    <TYPE>Object</TYPE>
-    <ID>Ledg.Bank</ID>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Collection</TYPE>
+    <ID>BankLedgers</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
         <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
       </STATICVARIABLES>
-      <FETCHLIST>
-        <FETCH>Name</FETCH>
-        <FETCH>ClosingBalance</FETCH>
-      </FETCHLIST>
+      <TDL>
+        <TDLMESSAGE>
+          <COLLECTION NAME="BankLedgers">
+            <TYPE>Ledger</TYPE>
+            <FETCH>Name</FETCH>
+            <FETCH>ClosingBalance</FETCH>
+            <FILTER>BankFilter</FILTER>
+          </COLLECTION>
+          <SYSTEM TYPE="Formulae" NAME="BankFilter">$$IsBank:$Parent</SYSTEM>
+        </TDLMESSAGE>
+      </TDL>
     </DESC>
   </BODY>
 </ENVELOPE>`;
-
     try {
-      const xmlText = await this.makeRequest(xmlRequest);
-      
+      const xmlText = await this.makeRequest(xml);
       const xmlDoc = this.parseXML(xmlText);
-      const closingBalance = xmlDoc.querySelector('CLOSINGBALANCE')?.textContent || '0';
-      return this.parseAmount(closingBalance);
-    } catch (error) {
-      console.error('Failed to fetch bank balance:', error);
-      return 0;
-    }
+      let total = 0;
+      xmlDoc.querySelectorAll('LEDGER').forEach(node => {
+        total += Math.abs(this.parseAmount(node.querySelector('CLOSINGBALANCE')?.textContent || '0'));
+      });
+      return total;
+    } catch { return 0; }
   }
 
-  // Get Sales Vouchers
   async getSalesVouchers(fromDate: string, toDate: string, company: string): Promise<number> {
-    const xmlRequest = `
-<ENVELOPE>
+    const xml = `<ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>EXPORT</TALLYREQUEST>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
     <TYPE>Collection</TYPE>
-    <ID>Voucher Register</ID>
+    <ID>DashSalesVouchers</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
         <SVTODATE TYPE="Date">${toDate}</SVTODATE>
-        <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
-          <COLLECTION NAME="SalesVocs">
+          <COLLECTION NAME="DashSalesVouchers">
             <TYPE>Voucher</TYPE>
-            <FILTERS>OnlySales</FILTERS>
+            <FETCH>Amount</FETCH>
+            <FILTER>OnlySales</FILTER>
           </COLLECTION>
-          <SYSTEM TYPE="Formulae" NAME="OnlySales">
-            $VoucherType = "Sales"
-          </SYSTEM>
+          <SYSTEM TYPE="Formulae" NAME="OnlySales">$$IsSales:$VOUCHERTYPENAME</SYSTEM>
         </TDLMESSAGE>
       </TDL>
     </DESC>
   </BODY>
 </ENVELOPE>`;
-
     try {
-      const xmlText = await this.makeRequest(xmlRequest);
-      
-      const xmlDoc = this.parseXML(xmlText);
-      let totalSales = 0;
-      
-      const amounts = xmlDoc.querySelectorAll('AMOUNT');
-      amounts.forEach(amount => {
-        const value = this.parseAmount(amount.textContent || '0');
-        if (value > 0) totalSales += value;
+      const xmlDoc = this.parseXML(await this.makeRequest(xml));
+      let total = 0;
+      xmlDoc.querySelectorAll('AMOUNT').forEach(el => {
+        const v = this.parseAmount(el.textContent || '0');
+        if (v > 0) total += v;
       });
-      
-      return totalSales;
-    } catch (error) {
-      console.error('Failed to fetch sales vouchers:', error);
-      return 0;
-    }
+      return total;
+    } catch { return 0; }
   }
 
-  // Get Purchase Vouchers
   async getPurchaseVouchers(fromDate: string, toDate: string, company: string): Promise<number> {
-    const xmlRequest = `
-<ENVELOPE>
+    const xml = `<ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>EXPORT</TALLYREQUEST>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
     <TYPE>Collection</TYPE>
-    <ID>Voucher Register</ID>
+    <ID>DashPurchaseVouchers</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
         <SVTODATE TYPE="Date">${toDate}</SVTODATE>
-        <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
-          <COLLECTION NAME="PurchaseVocs">
+          <COLLECTION NAME="DashPurchaseVouchers">
             <TYPE>Voucher</TYPE>
-            <FILTERS>OnlyPurchase</FILTERS>
+            <FETCH>Amount</FETCH>
+            <FILTER>OnlyPurchase</FILTER>
           </COLLECTION>
-          <SYSTEM TYPE="Formulae" NAME="OnlyPurchase">
-            $VoucherType = "Purchase"
-          </SYSTEM>
+          <SYSTEM TYPE="Formulae" NAME="OnlyPurchase">$$IsPurchase:$VOUCHERTYPENAME</SYSTEM>
         </TDLMESSAGE>
       </TDL>
     </DESC>
   </BODY>
 </ENVELOPE>`;
-
     try {
-      const xmlText = await this.makeRequest(xmlRequest);
-      
-      const xmlDoc = this.parseXML(xmlText);
-      let totalPurchases = 0;
-      
-      const amounts = xmlDoc.querySelectorAll('AMOUNT');
-      amounts.forEach(amount => {
-        const value = this.parseAmount(amount.textContent || '0');
-        if (value > 0) totalPurchases += value;
+      const xmlDoc = this.parseXML(await this.makeRequest(xml));
+      let total = 0;
+      xmlDoc.querySelectorAll('AMOUNT').forEach(el => {
+        const v = this.parseAmount(el.textContent || '0');
+        if (v > 0) total += v;
       });
-      
-      return totalPurchases;
-    } catch (error) {
-      console.error('Failed to fetch purchase vouchers:', error);
-      return 0;
-    }
+      return total;
+    } catch { return 0; }
   }
 
-  // Get Expense Vouchers (Payment and Journal)
   async getExpenseVouchers(fromDate: string, toDate: string, company: string): Promise<number> {
-    const xmlRequest = `
-<ENVELOPE>
+    const xml = `<ENVELOPE>
   <HEADER>
-    <TALLYREQUEST>EXPORT</TALLYREQUEST>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
     <TYPE>Collection</TYPE>
-    <ID>Voucher Register</ID>
+    <ID>DashExpenseVouchers</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
         <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
         <SVTODATE TYPE="Date">${toDate}</SVTODATE>
-        <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
-          <COLLECTION NAME="ExpenseVocs">
+          <COLLECTION NAME="DashExpenseVouchers">
             <TYPE>Voucher</TYPE>
-            <FILTERS>OnlyExpenses</FILTERS>
+            <FETCH>Amount</FETCH>
+            <FILTER>OnlyExpenses</FILTER>
           </COLLECTION>
-          <SYSTEM TYPE="Formulae" NAME="OnlyExpenses">
-            $VoucherType = "Payment" OR $VoucherType = "Journal"
-          </SYSTEM>
+          <SYSTEM TYPE="Formulae" NAME="OnlyExpenses">$$IsJournal:$VOUCHERTYPENAME OR $$IsPayment:$VOUCHERTYPENAME</SYSTEM>
         </TDLMESSAGE>
       </TDL>
     </DESC>
   </BODY>
 </ENVELOPE>`;
-
     try {
-      const xmlText = await this.makeRequest(xmlRequest);
-      
-      const xmlDoc = this.parseXML(xmlText);
-      let totalExpenses = 0;
-      
-      const amounts = xmlDoc.querySelectorAll('AMOUNT');
-      amounts.forEach(amount => {
-        const value = this.parseAmount(amount.textContent || '0');
-        if (value > 0) totalExpenses += value;
+      const xmlDoc = this.parseXML(await this.makeRequest(xml));
+      let total = 0;
+      xmlDoc.querySelectorAll('AMOUNT').forEach(el => {
+        const v = this.parseAmount(el.textContent || '0');
+        if (v > 0) total += v;
       });
-      
-      return totalExpenses;
-    } catch (error) {
-      console.error('Failed to fetch expense vouchers:', error);
-      return 0;
-    }
+      return total;
+    } catch { return 0; }
   }
 
-  // Get comprehensive financial overview using all APIs
   async getFinancialOverview(fromDate: string, toDate: string, company: string): Promise<FinancialOverview> {
-    try {
-      
-      // Fetch all data in parallel
-      const [cashBalance, bankBalance, totalSales, totalPurchases, totalExpenses] = await Promise.all([
-        this.getCashBalance(company),
-        this.getBankBalance(company),
-        this.getSalesVouchers(fromDate, toDate, company),
-        this.getPurchaseVouchers(fromDate, toDate, company),
-        this.getExpenseVouchers(fromDate, toDate, company)
-      ]);
-
-      const cashBank = cashBalance + bankBalance;
-      const netProfit = totalSales - totalPurchases - totalExpenses;
-      const gstPayable = totalSales * 0.18; // Assuming 18% GST
-
-      const overview: FinancialOverview = {
-        totalSales,
-        totalPurchases,
-        totalExpenses,
-        netProfit,
-        gstPayable,
-        cashBank
-      };
-
-      return overview;
-    } catch (error) {
-      console.error('Failed to fetch financial overview:', error);
-      throw error;
-    }
+    const [cashBalance, bankBalance, totalSales, totalPurchases, totalExpenses] = await Promise.all([
+      this.getCashBalance(company),
+      this.getBankBalance(company),
+      this.getSalesVouchers(fromDate, toDate, company),
+      this.getPurchaseVouchers(fromDate, toDate, company),
+      this.getExpenseVouchers(fromDate, toDate, company),
+    ]);
+    const cashBank = cashBalance + bankBalance;
+    const netProfit = totalSales - totalPurchases - totalExpenses;
+    const gstPayable = totalSales * 0.18;
+    return { totalSales, totalPurchases, totalExpenses, netProfit, gstPayable, cashBank };
   }
 }
