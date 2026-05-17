@@ -105,7 +105,33 @@ const LowStockAlerts: React.FC = () => {
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">Reorder Recommendations</h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          {/* Mobile: Card list */}
+          <div className="sm:hidden divide-y divide-gray-100">
+            {lowStockItems.map((item, index) => {
+              const suggestedReorder = Math.max(200, item.quantity * 3);
+              const leadTime = Math.floor(Math.random() * 14) + 3;
+              const priority = item.quantity < 50 ? 'High' : 'Medium';
+              return (
+                <div key={index} className="px-4 py-3.5 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 truncate text-sm">{item.name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Stock: {item.quantity} · Reorder: <span className="text-blue-600 font-medium">{suggestedReorder}</span> · {leadTime}d lead</p>
+                  </div>
+                  <div className="shrink-0 text-right flex flex-col items-end gap-1">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      priority === 'High' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                    }`}>
+                      {priority}
+                    </span>
+                    <button className="text-blue-600 text-xs font-medium">Create PO</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: Table */}
+          <table className="hidden sm:table w-full text-sm">
             <thead>
               <tr className="bg-gray-50">
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Item Name</th>

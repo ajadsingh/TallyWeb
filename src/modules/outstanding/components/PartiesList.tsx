@@ -90,7 +90,7 @@ const PartiesList: React.FC<PartiesListProps> = ({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full overflow-x-hidden">
       {/* Search bar */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -105,8 +105,45 @@ const PartiesList: React.FC<PartiesListProps> = ({
         />
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
+      {/* Mobile: Card list */}
+      <div className="sm:hidden divide-y divide-gray-100 rounded-lg border border-gray-200 overflow-hidden">
+        {filtered.map((party) => {
+          const outstanding = Math.abs(party.closingBalance);
+          return (
+            <button
+              key={party.name}
+              onClick={() => onPartyClick(party)}
+              className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-blue-50 transition-colors"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-800 truncate text-sm leading-tight">{party.name}</p>
+                <p className="text-xs text-gray-400 truncate mt-0.5">{party.parent || '—'}</p>
+              </div>
+              <div className="shrink-0 text-right">
+                {outstanding > 0 ? (
+                  <span className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold ${
+                    type === 'receivable' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                  }`}>
+                    {fmt(outstanding)}
+                  </span>
+                ) : (
+                  <span className="text-gray-400 text-xs">Nil</span>
+                )}
+              </div>
+              <ChevronRight className="h-4 w-4 text-gray-300 shrink-0" />
+            </button>
+          );
+        })}
+        <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
+          <span className="text-xs font-semibold text-gray-600">Total — {filtered.length} parties</span>
+          <span className={`text-sm font-bold ${type === 'receivable' ? 'text-emerald-700' : 'text-red-700'}`}>
+            {fmt(totalOutstanding)}
+          </span>
+        </div>
+      </div>
+
+      {/* Desktop: Table */}
+      <div className="hidden sm:block overflow-x-auto rounded-lg border border-gray-200">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-xs uppercase tracking-wide">
             <tr>

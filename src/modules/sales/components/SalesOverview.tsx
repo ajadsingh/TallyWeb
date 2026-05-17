@@ -143,7 +143,7 @@ const SalesOverview: React.FC<SalesOverviewProps> = ({
   ];
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full overflow-x-hidden">
       {loading && (
         <div className="flex items-center justify-center h-12 bg-blue-50 rounded-xl border border-blue-100">
           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2.5" />
@@ -158,7 +158,7 @@ const SalesOverview: React.FC<SalesOverviewProps> = ({
           {kpiCards.map(c => (
             <div
               key={c.label}
-              className={`snap-start shrink-0 w-[calc(50vw-24px)] bg-gradient-to-br ${c.bg} text-white rounded-2xl p-4 shadow-md`}
+              className={`snap-start shrink-0 w-[44vw] bg-gradient-to-br ${c.bg} text-white rounded-2xl p-4 shadow-md`}
             >
               <div className={`h-9 w-9 ${c.icon_bg} rounded-xl flex items-center justify-center mb-3`}>
                 {c.icon}

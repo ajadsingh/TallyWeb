@@ -55,7 +55,7 @@ const PurchaseTransactions: React.FC<PurchaseTransactionsProps> = ({
 
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-x-hidden">
       {/* Comparison Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
@@ -116,7 +116,34 @@ const PurchaseTransactions: React.FC<PurchaseTransactionsProps> = ({
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile: Card list */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {filteredTransactions.map((transaction) => (
+            <div key={transaction.id} className="px-4 py-3.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 truncate text-sm">{transaction.partyName}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {new Date(transaction.date).toLocaleDateString()}
+                    <span className="mx-1 text-gray-300">·</span>
+                    <span className="text-purple-600 font-medium">{transaction.voucherNumber}</span>
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-bold text-gray-900">{formatCurrency(transaction.amount)}</p>
+                  <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    transaction.period === 'current' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {transaction.period === 'current' ? currentPeriodLabel : previousPeriodLabel}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop: Table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>

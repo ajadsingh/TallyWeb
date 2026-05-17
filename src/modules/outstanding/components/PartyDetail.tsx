@@ -148,7 +148,7 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
   const creditLabel = type === 'receivable' ? 'Receipt / Payment' : 'Payment Made';
 
   return (
-    <div className="p-4 sm:p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-5 w-full overflow-x-hidden">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -294,92 +294,146 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
             <p className="text-sm mt-1">Try a wider date range (e.g. Last FY or All Time)</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-xs uppercase tracking-wide border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left text-gray-500 font-medium">Date</th>
-                  <th className="px-4 py-3 text-left text-gray-500 font-medium">Voucher Type</th>
-                  <th className="px-4 py-3 text-left text-gray-500 font-medium">Voucher No</th>
-                  <th className="px-4 py-3 text-left text-gray-500 font-medium">Narration</th>
-                  <th className="px-4 py-3 text-right text-blue-600 font-medium">{debitLabel}</th>
-                  <th className="px-4 py-3 text-right text-green-600 font-medium">{creditLabel}</th>
-                  <th className="px-4 py-3 text-right text-gray-500 font-medium">Balance</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {/* Opening balance row */}
-                <tr className="bg-yellow-50">
-                  <td colSpan={6} className="px-4 py-2 text-xs text-yellow-700 font-medium">
-                    Opening Balance
-                  </td>
-                  <td className="px-4 py-2 text-right text-xs font-bold text-yellow-700">
-                    {fmt(party.openingBalance)}
-                  </td>
-                </tr>
+          <>
+            {/* Mobile: Card list */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {/* Opening balance */}
+              <div className="px-4 py-2.5 bg-yellow-50">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-yellow-700 font-medium">Opening Balance</span>
+                  <span className="text-xs font-bold text-yellow-700">{fmt(party.openingBalance)}</span>
+                </div>
+              </div>
+              {txnsWithBalance.map((txn, i) => (
+                <button
+                  key={i}
+                  onClick={() => openVoucher(txn)}
+                  className="w-full px-4 py-3.5 text-left active:bg-blue-50 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          txn.drAmount > 0 ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'
+                        }`}>
+                          {txn.voucherType}
+                        </span>
+                        <span className="text-xs text-gray-400">{formatTallyDate(txn.date)}</span>
+                        {txn.voucherNumber && (
+                          <span className="text-xs text-blue-600 font-medium">{txn.voucherNumber}</span>
+                        )}
+                      </div>
+                      {txn.narration && (
+                        <p className="text-xs text-gray-400 mt-1 truncate">{txn.narration}</p>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      {txn.drAmount > 0
+                        ? <p className="text-sm font-semibold text-blue-700">{fmt(txn.drAmount)} <span className="text-xs font-normal">Dr</span></p>
+                        : <p className="text-sm font-semibold text-green-700">{fmt(txn.crAmount)} <span className="text-xs font-normal">Cr</span></p>
+                      }
+                      <p className="text-xs text-gray-500 mt-0.5">Bal: {fmt(txn.balance)}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+              {/* Closing balance */}
+              <div className={`px-4 py-3 ${type === 'receivable' ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                <div className="flex justify-between items-center">
+                  <span className={`text-xs font-semibold ${accentText}`}>Net Outstanding</span>
+                  <span className={`text-sm font-bold ${accentText}`}>{fmt(outstanding)}</span>
+                </div>
+              </div>
+            </div>
 
-                {txnsWithBalance.map((txn, i) => (
-                  <tr
-                    key={i}
-                    onClick={() => openVoucher(txn)}
-                    className="hover:bg-blue-50 transition-colors cursor-pointer"
-                    title="Click to view voucher details"
-                  >
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
-                      {formatTallyDate(txn.date)}
+            {/* Desktop: Table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-xs uppercase tracking-wide border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-gray-500 font-medium">Date</th>
+                    <th className="px-4 py-3 text-left text-gray-500 font-medium">Voucher Type</th>
+                    <th className="px-4 py-3 text-left text-gray-500 font-medium">Voucher No</th>
+                    <th className="px-4 py-3 text-left text-gray-500 font-medium">Narration</th>
+                    <th className="px-4 py-3 text-right text-blue-600 font-medium">{debitLabel}</th>
+                    <th className="px-4 py-3 text-right text-green-600 font-medium">{creditLabel}</th>
+                    <th className="px-4 py-3 text-right text-gray-500 font-medium">Balance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {/* Opening balance row */}
+                  <tr className="bg-yellow-50">
+                    <td colSpan={6} className="px-4 py-2 text-xs text-yellow-700 font-medium">
+                      Opening Balance
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        txn.drAmount > 0 ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'
-                      }`}>
-                        {txn.voucherType}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs">
-                      <span className="text-blue-600 underline underline-offset-2 font-medium">
-                        {txn.voucherNumber || '-'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs max-w-[200px] truncate">
-                      {txn.narration || '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium text-blue-700">
-                      {txn.drAmount > 0 ? fmt(txn.drAmount) : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium text-green-700">
-                      {txn.crAmount > 0 ? fmt(txn.crAmount) : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-700">
-                      {fmt(txn.balance)}
+                    <td className="px-4 py-2 text-right text-xs font-bold text-yellow-700">
+                      {fmt(party.openingBalance)}
                     </td>
                   </tr>
-                ))}
 
-                {/* Closing balance row */}
-                <tr className={type === 'receivable' ? 'bg-emerald-50' : 'bg-red-50'}>
-                  <td colSpan={6} className={`px-4 py-2 text-xs font-medium ${accentText}`}>
-                    Closing Balance (Net Outstanding)
-                  </td>
-                  <td className={`px-4 py-2 text-right text-sm font-bold ${accentText}`}>
-                    {fmt(outstanding)}
-                  </td>
-                </tr>
-              </tbody>
+                  {txnsWithBalance.map((txn, i) => (
+                    <tr
+                      key={i}
+                      onClick={() => openVoucher(txn)}
+                      className="hover:bg-blue-50 transition-colors cursor-pointer"
+                      title="Click to view voucher details"
+                    >
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                        {formatTallyDate(txn.date)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          txn.drAmount > 0 ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'
+                        }`}>
+                          {txn.voucherType}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <span className="text-blue-600 underline underline-offset-2 font-medium">
+                          {txn.voucherNumber || '-'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-400 text-xs max-w-[200px] truncate">
+                        {txn.narration || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-blue-700">
+                        {txn.drAmount > 0 ? fmt(txn.drAmount) : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-green-700">
+                        {txn.crAmount > 0 ? fmt(txn.crAmount) : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-700">
+                        {fmt(txn.balance)}
+                      </td>
+                    </tr>
+                  ))}
 
-              <tfoot className="bg-gray-100 border-t-2 border-gray-300 text-xs font-semibold">
-                <tr>
-                  <td colSpan={4} className="px-4 py-3 text-gray-600">
-                    Period Total - {transactions.length} entries
-                  </td>
-                  <td className="px-4 py-3 text-right text-blue-700 font-bold">{fmt(totalDr)}</td>
-                  <td className="px-4 py-3 text-right text-green-700 font-bold">{fmt(totalCr)}</td>
-                  <td className={`px-4 py-3 text-right font-bold text-base ${accentText}`}>
-                    {fmt(outstanding)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                  {/* Closing balance row */}
+                  <tr className={type === 'receivable' ? 'bg-emerald-50' : 'bg-red-50'}>
+                    <td colSpan={6} className={`px-4 py-2 text-xs font-medium ${accentText}`}>
+                      Closing Balance (Net Outstanding)
+                    </td>
+                    <td className={`px-4 py-2 text-right text-sm font-bold ${accentText}`}>
+                      {fmt(outstanding)}
+                    </td>
+                  </tr>
+                </tbody>
+
+                <tfoot className="bg-gray-100 border-t-2 border-gray-300 text-xs font-semibold">
+                  <tr>
+                    <td colSpan={4} className="px-4 py-3 text-gray-600">
+                      Period Total - {transactions.length} entries
+                    </td>
+                    <td className="px-4 py-3 text-right text-blue-700 font-bold">{fmt(totalDr)}</td>
+                    <td className="px-4 py-3 text-right text-green-700 font-bold">{fmt(totalCr)}</td>
+                    <td className={`px-4 py-3 text-right font-bold text-base ${accentText}`}>
+                      {fmt(outstanding)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

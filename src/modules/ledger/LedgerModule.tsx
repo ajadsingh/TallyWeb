@@ -67,7 +67,7 @@ const LedgerModule: React.FC = () => {
   const crTotal = ledgers.filter(l => l.closingBalance > 0).reduce((s, l) => s + l.closingBalance, 0);
 
   return (
-    <div className="p-4 sm:p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-5 w-full overflow-x-hidden">
 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

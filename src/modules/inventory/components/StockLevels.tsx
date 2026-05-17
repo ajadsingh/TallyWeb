@@ -77,7 +77,35 @@ const StockLevels: React.FC = () => {
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">Stock Level Details</h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          {/* Mobile: Card list */}
+          <div className="sm:hidden divide-y divide-gray-100">
+            {data.stock.itemLevels.map((item, index) => {
+              const minLevel = Math.floor(item.quantity * 0.2);
+              const maxLevel = Math.floor(item.quantity * 1.5);
+              const status = item.quantity < 50 ? 'Critical' : item.quantity < 100 ? 'Low' : 'Normal';
+              return (
+                <div key={index} className="px-4 py-3.5 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 truncate text-sm">{item.name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Min: {minLevel} · Max: {maxLevel}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-bold text-gray-800">{item.quantity}</p>
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium mt-0.5 ${
+                      status === 'Critical' ? 'bg-red-100 text-red-700' :
+                      status === 'Low' ? 'bg-amber-100 text-amber-700' :
+                      'bg-green-100 text-green-700'
+                    }`}>
+                      {status}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop: Table */}
+          <table className="hidden sm:table w-full text-sm">
             <thead>
               <tr className="bg-gray-50">
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Item Name</th>

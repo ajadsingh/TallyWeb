@@ -146,11 +146,11 @@ function App() {
           <CompanyProvider selectedCompany={selectedCompany} serverUrl={serverUrl || ''}>
             <DashboardProvider selectedCompany={selectedCompany} serverUrl={serverUrl}>
               <GlobalDateRangeProvider>
-              <div className="min-h-screen bg-gray-50 flex">
+              <div className="min-h-screen bg-gray-50 flex overflow-x-hidden">
                 <Sidebar currentView={getCurrentView()} onViewChange={handleViewChange} onLogout={handleLogout} />
-                <main className="flex-1 transition-all duration-300 ml-0 lg:ml-16 pb-16 lg:pb-0">
+                <main className="flex-1 min-w-0 overflow-x-hidden transition-all duration-300 ml-0 lg:ml-72 pb-16 lg:pb-0 pt-14 lg:pt-0">
                   {/* Global date-range filter — one place, all modules react to it */}
-                  <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 overflow-x-auto scrollbar-hide">
+                  <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 overflow-x-auto scrollbar-hide" style={{WebkitOverflowScrolling:'touch'}}>
                     <GlobalDateRangeBar />
                   </div>
                   <Routes>

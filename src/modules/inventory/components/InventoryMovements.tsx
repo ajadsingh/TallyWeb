@@ -110,7 +110,32 @@ const InventoryMovements: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile: Card list */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {filteredMovements.map((movement) => (
+            <div key={movement.id} className="px-4 py-3.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 truncate text-sm">{movement.item}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{movement.reason || movement.reference}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                    movement.type === 'IN' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                  }`}>
+                    {movement.type === 'IN' ? <ArrowUp size={10} className="mr-1" /> : <ArrowDown size={10} className="mr-1" />}
+                    {movement.type}
+                  </span>
+                  <p className="text-sm font-bold text-gray-800 mt-0.5">{movement.quantity}</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{movement.date}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop: Table */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>

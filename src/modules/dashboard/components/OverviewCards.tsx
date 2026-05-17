@@ -8,9 +8,9 @@ const OverviewCards: React.FC = () => {
 
   if (loading || !summary) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 animate-pulse">
+          <div key={index} className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-200 animate-pulse">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
             </div>
@@ -52,18 +52,18 @@ const OverviewCards: React.FC = () => {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+    <div className="grid grid-cols-2 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6">
       {cards.map((card, index) => {
         const Icon = card.icon;
         return (
-          <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+          <div key={index} className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow min-w-0">
             <div className="flex items-center justify-between mb-4">
               <div className={`p-3 rounded-lg border ${card.colorClass}`}>
                 <Icon size={22} />
               </div>
             </div>
-            <p className="text-sm font-medium text-gray-600 mb-1">{card.title}</p>
-            <p className="text-2xl font-bold text-gray-800">{card.prefix}{formatCurrency(card.value)}</p>
+            <p className="text-sm font-medium text-gray-600 mb-1 truncate">{card.title}</p>
+            <p className="text-2xl font-bold text-gray-800 truncate">{card.prefix}{formatCurrency(card.value)}</p>
           </div>
         );
       })}

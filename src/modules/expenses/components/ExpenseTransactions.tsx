@@ -95,7 +95,7 @@ const ExpenseTransactions: React.FC<ExpenseTransactionsProps> = ({
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full overflow-x-hidden">
       {/* Filters row */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-48">
@@ -141,77 +141,108 @@ const ExpenseTransactions: React.FC<ExpenseTransactionsProps> = ({
           <p className="text-sm mt-1">Try changing the date range or filter</p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs uppercase tracking-wide border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  <SortBtn k="date" label="Date" />
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  <SortBtn k="voucherType" label="Type" />
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  Voucher No
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  <SortBtn k="partyName" label="Party / Ledger" />
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-500">
-                  Narration
-                </th>
-                <th className="px-4 py-3 text-right font-medium text-gray-500">
-                  <SortBtn k="amount" label="Amount" />
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map((v, i) => (
-                <tr key={`${v.guid || i}`} className="hover:bg-orange-50 transition-colors">
-                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
-                    {v.date}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        v.voucherType.toLowerCase().includes('payment')
-                          ? 'bg-red-50 text-red-700'
-                          : 'bg-blue-50 text-blue-700'
-                      }`}
+        <>
+          {/* Mobile: Card list */}
+          <div className="sm:hidden divide-y divide-gray-100 rounded-xl border border-gray-200 overflow-hidden">
+            {filtered.map((v, i) => (
+              <div key={`${v.guid || i}`} className="px-4 py-3.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 truncate text-sm leading-tight">{v.partyName || '—'}</p>
+                    <p className="text-xs text-gray-400 mt-0.5 truncate">{v.narration || v.voucherNumber || '—'}</p>
+                  </div>
+                  <p className="font-bold text-orange-700 text-sm shrink-0">{fmt(v.amount)}</p>
+                </div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                    v.voucherType.toLowerCase().includes('payment') ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+                  }`}>
+                    {v.voucherType}
+                  </span>
+                  <span className="text-xs text-gray-400">{v.date}</span>
+                  {v.voucherNumber && <span className="text-xs text-gray-400">· {v.voucherNumber}</span>}
+                </div>
+              </div>
+            ))}
+            <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
+              <span className="text-xs font-semibold text-gray-600">Total — {filtered.length} entries</span>
+              <span className="text-sm font-bold text-orange-700">{fmt(totalAmount)}</span>
+            </div>
+          </div>
+
+          {/* Desktop: Table */}
+          <div className="hidden sm:block overflow-x-auto rounded-xl border border-gray-200">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs uppercase tracking-wide border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">
+                    <SortBtn k="date" label="Date" />
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">
+                    <SortBtn k="voucherType" label="Type" />
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">
+                    Voucher No
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">
+                    <SortBtn k="partyName" label="Party / Ledger" />
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">
+                    Narration
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium text-gray-500">
+                    <SortBtn k="amount" label="Amount" />
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtered.map((v, i) => (
+                  <tr key={`${v.guid || i}`} className="hover:bg-orange-50 transition-colors">
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                      {v.date}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          v.voucherType.toLowerCase().includes('payment')
+                            ? 'bg-red-50 text-red-700'
+                            : 'bg-blue-50 text-blue-700'
+                        }`}
+                      >
+                        {v.voucherType}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">
+                      {v.voucherNumber || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 font-medium">
+                      {v.partyName || '—'}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-gray-400 text-xs max-w-xs truncate"
+                      title={v.narration}
                     >
-                      {v.voucherType}
-                    </span>
+                      {v.narration || '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-orange-700">
+                      {fmt(v.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td colSpan={5} className="px-4 py-3 text-sm font-semibold text-gray-700">
+                    Total — {filtered.length} entries
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {v.voucherNumber || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-gray-700 font-medium">
-                    {v.partyName || '—'}
-                  </td>
-                  <td
-                    className="px-4 py-3 text-gray-400 text-xs max-w-xs truncate"
-                    title={v.narration}
-                  >
-                    {v.narration || '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold text-orange-700">
-                    {fmt(v.amount)}
+                  <td className="px-4 py-3 text-right font-bold text-base text-orange-700">
+                    {fmt(totalAmount)}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot className="bg-gray-50 border-t-2 border-gray-300">
-              <tr>
-                <td colSpan={5} className="px-4 py-3 text-sm font-semibold text-gray-700">
-                  Total — {filtered.length} entries
-                </td>
-                <td className="px-4 py-3 text-right font-bold text-base text-orange-700">
-                  {fmt(totalAmount)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+              </tfoot>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

@@ -43,8 +43,8 @@ const CashBankOverview: React.FC = () => {
                   <Icon size={20} />
                 </div>
               </div>
-              <p className="text-sm font-medium mb-1">{item.label}</p>
-              <p className="text-xl font-bold text-gray-800">{formatCurrency(item.value)}</p>
+              <p className="text-sm font-medium mb-1 truncate">{item.label}</p>
+              <p className="text-xl font-bold text-gray-800 truncate">{formatCurrency(item.value)}</p>
             </div>
           );
         })}

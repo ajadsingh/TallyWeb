@@ -68,21 +68,21 @@ const RecentActivity: React.FC = () => {
             const Icon = voucherTypeIcon(v.voucherType);
             const colorClass = voucherTypeColor(v.voucherType);
             return (
-              <div key={index} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:shadow-sm transition-shadow">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-2 rounded-lg border ${colorClass}`}>
+              <div key={index} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:shadow-sm transition-shadow gap-2">
+                <div className="flex items-center space-x-3 min-w-0 flex-1">
+                  <div className={`p-2 rounded-lg border ${colorClass} shrink-0`}>
                     <Icon size={18} />
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-800 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-800 text-sm truncate">
                       {v.partyName || v.voucherType}
                     </p>
-                    <p className="text-xs text-gray-500">
-                      {v.voucherType}{v.voucherNumber ? ` #${v.voucherNumber}` : ''} Â· {formatTallyDate(v.date)}
+                    <p className="text-xs text-gray-500 truncate">
+                      {v.voucherType}{v.voucherNumber ? ` #${v.voucherNumber}` : ''} · {formatTallyDate(v.date)}
                     </p>
                   </div>
                 </div>
-                <p className="font-bold text-gray-800 text-sm">{formatCurrency(v.amount)}</p>
+                <p className="font-bold text-gray-800 text-sm shrink-0">{formatCurrency(v.amount)}</p>
               </div>
             );
           })}

@@ -77,7 +77,7 @@ const PaymentsModule: React.FC = () => {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 w-full overflow-x-hidden">
 
       {/* ── Header ──────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -145,7 +145,7 @@ const PaymentsModule: React.FC = () => {
           ].map(c => (
             <div
               key={c.label}
-              className={`snap-start shrink-0 w-[calc(50vw-24px)] bg-gradient-to-br ${c.bg} text-white rounded-2xl p-4 shadow-md`}
+              className={`snap-start shrink-0 w-[44vw] bg-gradient-to-br ${c.bg} text-white rounded-2xl p-4 shadow-md`}
             >
               <div className={`h-9 w-9 ${c.ibg} rounded-xl flex items-center justify-center mb-3`}>
                 <c.Icon className="h-5 w-5 text-white" />

@@ -6,7 +6,7 @@ import RecentActivity from './components/RecentActivity';
 
 const Dashboard: React.FC = () => {
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 w-full overflow-x-hidden">
       <div className="mb-4 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Dashboard</h1>
         <p className="text-gray-500 mt-1 text-sm">Your financial overview</p>

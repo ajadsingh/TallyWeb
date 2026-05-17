@@ -291,7 +291,7 @@ const PurchaseOverview: React.FC<PurchaseOverviewProps> = ({
   ];
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 w-full overflow-x-hidden">
 
       {/* ── Loading banner ────────────────────────────────────────────── */}
       {loading && (
@@ -308,7 +308,7 @@ const PurchaseOverview: React.FC<PurchaseOverviewProps> = ({
           {kpiCards.map(c => (
             <div
               key={c.label}
-              className={`snap-start shrink-0 w-[calc(50vw-24px)] bg-gradient-to-br ${c.bg} text-white rounded-2xl p-4 shadow-md`}
+              className={`snap-start shrink-0 w-[44vw] bg-gradient-to-br ${c.bg} text-white rounded-2xl p-4 shadow-md`}
             >
               <div className={`h-9 w-9 ${c.icon_bg} rounded-xl flex items-center justify-center mb-3`}>
                 {c.icon}

@@ -52,12 +52,12 @@ const QuickStats: React.FC = () => {
           const Icon = stat.icon;
           
           return (
-            <div key={index} className="p-4 rounded-lg border border-gray-100 hover:shadow-sm transition-shadow">
-              <div className={`inline-flex p-2 rounded-lg border ${stat.colorClass} mb-3`}>
-                <Icon size={20} />
+            <div key={index} className="p-3 sm:p-4 rounded-lg border border-gray-100 hover:shadow-sm transition-shadow min-w-0">
+              <div className={`inline-flex p-2 rounded-lg border ${stat.colorClass} mb-2 sm:mb-3`}>
+                <Icon size={18} />
               </div>
-              <h3 className="text-sm font-medium text-gray-600 mb-1">{stat.label}</h3>
-              <p className="text-base font-bold text-gray-800">{stat.value}</p>
+              <h3 className="text-xs sm:text-sm font-medium text-gray-600 mb-0.5 truncate">{stat.label}</h3>
+              <p className="text-sm sm:text-base font-bold text-gray-800 truncate">{stat.value}</p>
             </div>
           );
         })}

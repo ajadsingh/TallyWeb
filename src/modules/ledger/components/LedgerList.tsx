@@ -137,54 +137,81 @@ const LedgerList: React.FC<LedgerListProps> = ({ ledgers, loading, onSelect, onR
           <p className="text-sm mt-1">Try adjusting your search or group filter</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className={thClass('name')}   onClick={() => handleSort('name')}>
-                  <span className="flex items-center gap-1">Ledger Name <SortIcon col="name" active={sortKey} dir={sortDir} /></span>
-                </th>
-                <th className={thClass('parent')} onClick={() => handleSort('parent')}>
-                  <span className="flex items-center gap-1">Group <SortIcon col="parent" active={sortKey} dir={sortDir} /></span>
-                </th>
-                <th className={thClass('opening')} onClick={() => handleSort('opening')}>
-                  <span className="flex items-center gap-1 justify-end w-full">Opening Bal <SortIcon col="opening" active={sortKey} dir={sortDir} /></span>
-                </th>
-                <th className={thClass('closing')} onClick={() => handleSort('closing')}>
-                  <span className="flex items-center gap-1 justify-end w-full">Closing Bal <SortIcon col="closing" active={sortKey} dir={sortDir} /></span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map((ledger, i) => (
-                <tr
-                  key={i}
-                  onClick={() => onSelect(ledger)}
-                  className="hover:bg-blue-50 transition-colors cursor-pointer"
-                >
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-gray-800">{ledger.name}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {ledger.parent ? (
-                      <span className="inline-block bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
-                        {ledger.parent}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300">{'-'}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <BalanceCell amount={ledger.openingBalance} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <BalanceCell amount={ledger.closingBalance} />
-                  </td>
+        <>
+          {/* Mobile: Card list */}
+          <div className="sm:hidden divide-y divide-gray-50">
+            {filtered.map((ledger, i) => (
+              <button
+                key={i}
+                onClick={() => onSelect(ledger)}
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-blue-50 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 truncate text-sm">{ledger.name}</p>
+                  {ledger.parent ? (
+                    <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full mt-0.5">
+                      {ledger.parent}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="shrink-0 text-right">
+                  <BalanceCell amount={ledger.closingBalance} />
+                </div>
+                <ChevronUp className="h-4 w-4 text-gray-300 shrink-0 rotate-90" />
+              </button>
+            ))}
+          </div>
+
+          {/* Desktop: Table */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className={thClass('name')}   onClick={() => handleSort('name')}>
+                    <span className="flex items-center gap-1">Ledger Name <SortIcon col="name" active={sortKey} dir={sortDir} /></span>
+                  </th>
+                  <th className={thClass('parent')} onClick={() => handleSort('parent')}>
+                    <span className="flex items-center gap-1">Group <SortIcon col="parent" active={sortKey} dir={sortDir} /></span>
+                  </th>
+                  <th className={thClass('opening')} onClick={() => handleSort('opening')}>
+                    <span className="flex items-center gap-1 justify-end w-full">Opening Bal <SortIcon col="opening" active={sortKey} dir={sortDir} /></span>
+                  </th>
+                  <th className={thClass('closing')} onClick={() => handleSort('closing')}>
+                    <span className="flex items-center gap-1 justify-end w-full">Closing Bal <SortIcon col="closing" active={sortKey} dir={sortDir} /></span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtered.map((ledger, i) => (
+                  <tr
+                    key={i}
+                    onClick={() => onSelect(ledger)}
+                    className="hover:bg-blue-50 transition-colors cursor-pointer"
+                  >
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-gray-800">{ledger.name}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {ledger.parent ? (
+                        <span className="inline-block bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                          {ledger.parent}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">{'-'}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <BalanceCell amount={ledger.openingBalance} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <BalanceCell amount={ledger.closingBalance} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );
