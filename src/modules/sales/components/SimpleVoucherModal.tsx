@@ -20,7 +20,7 @@ import {
 import { SalesApiService } from '../../../services/api/sales/salesApiService';
 import { useCompany } from '../../../context/CompanyContext';
 import CompanyApiService, { TallyCompanyDetails } from '../../../services/api/company/companyApiService';
-import LedgerApiService from '../../../services/api/ledger/ledgerApiService';
+
 import { PDFGenerator } from '../../../utils/exportUtils/pdfGenerator';
 
 interface StockItem {
@@ -101,11 +101,11 @@ export const SimpleVoucherModal: React.FC<SimpleVoucherModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      if (voucherData && voucherData.stockItems) {
-        // Use the data that's already available from the voucher list
+      if (voucherData) {
+        // Always use the data already available from the voucher list
         extractVoucherDetailsFromExistingData();
       } else if (voucherGuid && selectedCompany) {
-        // Fallback to API call if data not available
+        // Fallback to API call only if no voucher data passed
         extractVoucherDetails();
       }
     }
@@ -167,12 +167,7 @@ export const SimpleVoucherModal: React.FC<SimpleVoucherModalProps> = ({
     }
   }, [isOpen, selectedCompany, companyLoadAttempted]);
 
-  useEffect(() => {
-    if (voucherDetail?.party && selectedCompany) {
-      const api = new LedgerApiService();
-      api.getLedgerDetails(voucherDetail.party, selectedCompany).then(setPartyDetails).catch(() => setPartyDetails(null));
-    }
-  }, [voucherDetail?.party, selectedCompany]);
+  // partyDetails reserved for future use — getLedgerDetails not yet implemented
 
   const extractVoucherDetailsFromExistingData = () => {
     try {
@@ -511,7 +506,7 @@ ${companyDetails?.name || companyDetails?.basiccompanyformalname || 'Your Compan
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          {(loading || companyLoading) && (
+          {loading && (
             <div className="flex items-center justify-center p-12">
               <div className="text-center">
                 <Loader2 className="h-16 w-16 animate-spin text-blue-600 mx-auto mb-6" />
@@ -531,8 +526,8 @@ ${companyDetails?.name || companyDetails?.basiccompanyformalname || 'Your Compan
             </div>
           )}
 
-          {/* Only show voucher details when both voucher and company details are loaded */}
-          {voucherDetail && !loading && !companyLoading && companyDetails && (
+          {/* Show voucher details as soon as voucher data is loaded */}
+          {voucherDetail && !loading && (
             <div className="p-6 space-y-6">
               {/* Voucher Header - Beautiful Invoice Style */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">

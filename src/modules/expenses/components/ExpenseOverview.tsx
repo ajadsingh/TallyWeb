@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { TrendingDown, Receipt, Tag } from 'lucide-react';
+import { TrendingDown, Receipt, Tag, RefreshCw } from 'lucide-react';
 import { ExpenseLedger, ExpenseVoucher } from '../../../services/api/expenses/expensesApiService';
 
 interface ExpenseOverviewProps {

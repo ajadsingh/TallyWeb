@@ -636,24 +636,21 @@ export class SalesApiService extends BaseApiService {
    * Clean XML text to remove invalid characters that cause parsing errors
    */
   private cleanXmlForParsing(xmlText: string): string {
-    // Remove invalid XML character references that cause parsing errors
-    // Common problematic patterns in Tally XML:
-    // - Invalid char refs like &#4; (control characters)
-    // - Malformed entities
-    
     let cleaned = xmlText;
-    
+
+    // Fix unescaped & (e.g. party names like "ABC & Co") — must run BEFORE other replacements
+    cleaned = cleaned.replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;');
+
     // Remove invalid character references (control characters 0-8, 11, 12, 14-31)
-    // Keep valid ones: &#9; (tab), &#10; (newline), &#13; (carriage return)
     cleaned = cleaned.replace(/&#([0-8]|1[1-2]|1[4-9]|2[0-9]|3[01]);/g, '');
-    
+
     // Remove any remaining problematic character references
     cleaned = cleaned.replace(/&#x[0-8A-Fa-f];/g, '');
-    
-    // Remove actual control characters that might be in the text
+
+    // Remove actual control characters
     // eslint-disable-next-line no-control-regex
     cleaned = cleaned.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
-    
+
     return cleaned;
   }
 

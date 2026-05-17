@@ -1,24 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, RefreshCw, AlertCircle } from 'lucide-react';
+import LedgerApiService, {
+  TallyLedger,
+  LedgerTransaction,
+} from '../../../services/api/ledger/ledgerApiService';
 import OutstandingApiService, {
-  PartyOutstanding,
-  PartyTransaction,
   VoucherDetail,
 } from '../../../services/api/outstanding/outstandingApiService';
-import VoucherModal from './VoucherModal';
+import VoucherModal from '../../outstanding/components/VoucherModal';
 
-interface PartyDetailProps {
-  party: PartyOutstanding;
-  type: 'receivable' | 'payable';
+interface LedgerStatementProps {
+  ledger: TallyLedger;
   companyName: string;
   globalFrom: string;
   globalTo: string;
   onBack: () => void;
 }
 
-// helpers
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** YYYYMMDD to "DD MMM YYYY" */
 const formatTallyDate = (d: string): string => {
   if (d.length === 8) {
     return new Date(`${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`)
@@ -42,50 +42,69 @@ const quickRange = (key: string): { from: string; to: string } => {
   const fyStart     = m >= 3 ? y : y - 1;
   const prevFyStart = fyStart - 1;
 
-  if (key === 'currentFY') return { from: `${fyStart}-04-01`,    to: `${fyStart + 1}-03-31` };
-  if (key === 'prevFY')    return { from: `${prevFyStart}-04-01`, to: `${fyStart}-03-31`     };
-  if (key === 'thisMonth') return { from: `${y}-${pad(m + 1)}-01`, to: fmtD(new Date(y, m + 1, 0)) };
+  if (key === 'currentFY') return { from: `${fyStart}-04-01`,      to: `${fyStart + 1}-03-31`   };
+  if (key === 'prevFY')    return { from: `${prevFyStart}-04-01`,   to: `${fyStart}-03-31`       };
+  if (key === 'Q1')        return { from: `${fyStart}-04-01`,       to: `${fyStart}-06-30`       };
+  if (key === 'Q2')        return { from: `${fyStart}-07-01`,       to: `${fyStart}-09-30`       };
+  if (key === 'Q3')        return { from: `${fyStart}-10-01`,       to: `${fyStart}-12-31`       };
+  if (key === 'Q4')        return { from: `${fyStart + 1}-01-01`,   to: `${fyStart + 1}-03-31`   };
+  if (key === 'thisMonth') return { from: `${y}-${pad(m + 1)}-01`,  to: fmtD(new Date(y, m + 1, 0)) };
   if (key === 'last3m')    return { from: fmtD(new Date(y, m - 2, 1)), to: fmtD(new Date(y, m + 1, 0)) };
   if (key === 'last6m')    return { from: fmtD(new Date(y, m - 5, 1)), to: fmtD(new Date(y, m + 1, 0)) };
+  // allTime / default
   return { from: `${prevFyStart}-04-01`, to: `${fyStart + 1}-03-31` };
 };
 
 const PRESETS = [
   { key: 'currentFY',  label: 'This FY'    },
   { key: 'prevFY',     label: 'Last FY'    },
+  { key: 'Q1',         label: 'Q1'         },
+  { key: 'Q2',         label: 'Q2'         },
+  { key: 'Q3',         label: 'Q3'         },
+  { key: 'Q4',         label: 'Q4'         },
   { key: 'thisMonth',  label: 'This Month' },
   { key: 'last3m',     label: 'Last 3 Mo'  },
   { key: 'last6m',     label: 'Last 6 Mo'  },
   { key: 'allTime',    label: 'All Time'   },
 ] as const;
 
-const api = new OutstandingApiService();
+// Module-level singletons — stable refs without useRef overhead
+const ledgerApi      = new LedgerApiService();
+const outstandingApi = new OutstandingApiService();
 
-const PartyDetail: React.FC<PartyDetailProps> = ({
-  party, type, companyName, globalFrom, globalTo, onBack,
+// ── Component ─────────────────────────────────────────────────────────────────
+
+const LedgerStatement: React.FC<LedgerStatementProps> = ({
+  ledger, companyName, globalFrom, globalTo, onBack,
 }) => {
-  const [transactions, setTransactions] = useState<PartyTransaction[]>([]);
-  const [loading, setLoading]           = useState(false);
-  const [error,   setError]             = useState<string | null>(null);
-  const [activePreset, setActivePreset] = useState<string>('global');
+  const [transactions, setTransactions] = useState<LedgerTransaction[]>([]);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
+  // Determine initial preset: if global range matches currentFY, highlight it; else 'custom'
+  const [activePreset, setActivePreset] = useState<string>(() => {
+    const fy = quickRange('currentFY');
+    if (!globalFrom && !globalTo) return 'currentFY';
+    if (globalFrom === fy.from && globalTo === fy.to) return 'currentFY';
+    return 'custom';
+  });
 
   const [fromDate, setFromDate] = useState(globalFrom || quickRange('currentFY').from);
   const [toDate,   setToDate]   = useState(globalTo   || quickRange('currentFY').to);
 
-  // Voucher detail modal
-  const [modalOpen,      setModalOpen]      = useState(false);
-  const [modalLoading,   setModalLoading]   = useState(false);
-  const [modalError,     setModalError]     = useState<string | null>(null);
-  const [modalVoucher,   setModalVoucher]   = useState<VoucherDetail | null>(null);
+  // Voucher detail modal state
+  const [modalOpen,    setModalOpen]    = useState(false);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError,   setModalError]   = useState<string | null>(null);
+  const [modalVoucher, setModalVoucher] = useState<VoucherDetail | null>(null);
 
-  const openVoucher = async (txn: PartyTransaction) => {
+  const openVoucher = async (txn: LedgerTransaction) => {
     if (!txn.voucherNumber) return;
     setModalOpen(true);
     setModalLoading(true);
     setModalError(null);
     setModalVoucher(null);
     try {
-      const detail = await api.getVoucherDetail(companyName, txn.voucherNumber, txn.date);
+      const detail = await outstandingApi.getVoucherDetail(companyName, txn.voucherNumber, txn.date, txn.voucherType);
       setModalVoucher(detail);
       if (!detail) setModalError('Voucher not found in Tally for this date.');
     } catch (err) {
@@ -100,9 +119,9 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const txns = await api.getPartyTransactions(
+      const txns = await ledgerApi.getLedgerTransactions(
         companyName,
-        party.name,
+        ledger.name,
         from.replace(/-/g, ''),
         to.replace(/-/g, ''),
       );
@@ -112,11 +131,11 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [companyName, party.name]);
+  }, [companyName, ledger.name]);
 
   useEffect(() => {
     fetchTransactions(fromDate, toDate);
-  }, [party.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ledger.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyPreset = (key: string) => {
     const r = quickRange(key);
@@ -126,26 +145,18 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
     fetchTransactions(r.from, r.to);
   };
 
-  let runningBalance = party.openingBalance;
+  // Running balance
+  let runningBalance = ledger.openingBalance;
   const txnsWithBalance = transactions.map(t => {
-    if (type === 'receivable') {
-      runningBalance += t.drAmount - t.crAmount;
-    } else {
-      runningBalance += t.crAmount - t.drAmount;
-    }
+    // Dr increases Dr balance (negative in Tally), Cr increases Cr balance (positive)
+    // We just track in natural direction: Dr subtracts, Cr adds
+    runningBalance += t.crAmount - t.drAmount;
     return { ...t, balance: runningBalance };
   });
 
-  const totalDr     = transactions.reduce((s, t) => s + t.drAmount, 0);
-  const totalCr     = transactions.reduce((s, t) => s + t.crAmount, 0);
-  const outstanding = Math.abs(party.closingBalance);
-
-  const accentText  = type === 'receivable' ? 'text-emerald-600' : 'text-red-600';
-  const accentBadge = type === 'receivable'
-    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-    : 'bg-red-50 text-red-700 border-red-200';
-  const debitLabel  = type === 'receivable' ? 'Sales / Invoice'   : 'Purchase / Invoice';
-  const creditLabel = type === 'receivable' ? 'Receipt / Payment' : 'Payment Made';
+  const totalDr = transactions.reduce((s, t) => s + t.drAmount, 0);
+  const totalCr = transactions.reduce((s, t) => s + t.crAmount, 0);
+  const closingBal = ledger.closingBalance;
 
   return (
     <div className="p-4 sm:p-6 space-y-5">
@@ -156,25 +167,28 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
           <button
             onClick={onBack}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            title="Back to list"
+            title="Back to ledger list"
           >
             <ArrowLeft className="h-5 w-5 text-gray-600" />
           </button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-gray-800">{party.name}</h1>
-              <span className={`px-2 py-0.5 text-xs font-semibold border rounded-full ${accentBadge}`}>
-                {type === 'receivable' ? 'Customer' : 'Vendor'}
-              </span>
+              <h1 className="text-xl font-bold text-gray-800">{ledger.name}</h1>
             </div>
-            {party.parent && (
-              <p className="text-xs text-gray-400 mt-0.5">{party.parent}</p>
+            {ledger.parent && (
+              <p className="text-xs text-gray-400 mt-0.5">
+                <span className="inline-block bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full">
+                  {ledger.parent}
+                </span>
+              </p>
             )}
           </div>
         </div>
         <div className="text-right">
-          <p className="text-xs text-gray-400">{type === 'receivable' ? 'To Receive' : 'To Pay'}</p>
-          <p className={`text-2xl font-bold ${accentText}`}>{fmt(outstanding)}</p>
+          <p className="text-xs text-gray-400">Closing Balance</p>
+          <p className={`text-2xl font-bold ${closingBal < 0 ? 'text-blue-700' : closingBal > 0 ? 'text-emerald-700' : 'text-gray-500'}`}>
+            {closingBal !== 0 ? `${fmt(closingBal)} ${closingBal < 0 ? 'Dr' : 'Cr'}` : '₹0'}
+          </p>
         </div>
       </div>
 
@@ -182,29 +196,33 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white border border-gray-200 rounded-xl p-3">
           <p className="text-xs text-gray-400 mb-1">Opening Balance</p>
-          <p className="text-base font-bold text-gray-700">{fmt(party.openingBalance)}</p>
+          <p className="text-sm font-bold text-gray-700">
+            {ledger.openingBalance !== 0
+              ? `${fmt(ledger.openingBalance)} ${ledger.openingBalance < 0 ? 'Dr' : 'Cr'}`
+              : '₹0'}
+          </p>
         </div>
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
-          <p className="text-xs text-blue-500 mb-1">
-            {type === 'receivable' ? 'Total Sales (Dr)' : 'Total Purchases (Cr)'}
-          </p>
-          <p className="text-base font-bold text-blue-700">
-            {fmt(type === 'receivable' ? totalDr : totalCr)}
-          </p>
+          <p className="text-xs text-blue-500 mb-1">Total Debit</p>
+          <p className="text-sm font-bold text-blue-700">{fmt(totalDr)}</p>
         </div>
-        <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-          <p className="text-xs text-gray-500 mb-1">
-            {type === 'receivable' ? 'Receipts (Cr)' : 'Payments (Dr)'}
-          </p>
-          <p className="text-base font-bold text-gray-700">
-            {fmt(type === 'receivable' ? totalCr : totalDr)}
-          </p>
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+          <p className="text-xs text-emerald-600 mb-1">Total Credit</p>
+          <p className="text-sm font-bold text-emerald-700">{fmt(totalCr)}</p>
         </div>
         <div className={`border rounded-xl p-3 ${
-          type === 'receivable' ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
+          closingBal < 0
+            ? 'bg-blue-50 border-blue-200'
+            : closingBal > 0
+            ? 'bg-emerald-50 border-emerald-200'
+            : 'bg-gray-50 border-gray-200'
         }`}>
-          <p className={`text-xs mb-1 ${accentText}`}>Net Outstanding</p>
-          <p className={`text-base font-bold ${accentText}`}>{fmt(outstanding)}</p>
+          <p className={`text-xs mb-1 ${closingBal < 0 ? 'text-blue-600' : closingBal > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+            Closing Balance
+          </p>
+          <p className={`text-sm font-bold ${closingBal < 0 ? 'text-blue-700' : closingBal > 0 ? 'text-emerald-700' : 'text-gray-500'}`}>
+            {closingBal !== 0 ? `${fmt(closingBal)} ${closingBal < 0 ? 'Dr' : 'Cr'}` : '₹0'}
+          </p>
         </div>
       </div>
 
@@ -274,11 +292,11 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
-            <h2 className="font-semibold text-gray-700">Transaction Ledger</h2>
+            <h2 className="font-semibold text-gray-700">Ledger Statement</h2>
             <p className="text-xs text-gray-400 mt-0.5">
               {loading
                 ? 'Loading...'
-                : `${transactions.length} entries | ${fromDate} to ${toDate}`}
+                : `${transactions.length} entries · ${fromDate} to ${toDate}`}
             </p>
           </div>
         </div>
@@ -302,19 +320,22 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
                   <th className="px-4 py-3 text-left text-gray-500 font-medium">Voucher Type</th>
                   <th className="px-4 py-3 text-left text-gray-500 font-medium">Voucher No</th>
                   <th className="px-4 py-3 text-left text-gray-500 font-medium">Narration</th>
-                  <th className="px-4 py-3 text-right text-blue-600 font-medium">{debitLabel}</th>
-                  <th className="px-4 py-3 text-right text-green-600 font-medium">{creditLabel}</th>
+                  <th className="px-4 py-3 text-right text-blue-600 font-medium">Debit</th>
+                  <th className="px-4 py-3 text-right text-emerald-600 font-medium">Credit</th>
                   <th className="px-4 py-3 text-right text-gray-500 font-medium">Balance</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
+
                 {/* Opening balance row */}
                 <tr className="bg-yellow-50">
                   <td colSpan={6} className="px-4 py-2 text-xs text-yellow-700 font-medium">
                     Opening Balance
                   </td>
                   <td className="px-4 py-2 text-right text-xs font-bold text-yellow-700">
-                    {fmt(party.openingBalance)}
+                    {ledger.openingBalance !== 0
+                      ? `${fmt(ledger.openingBalance)} ${ledger.openingBalance < 0 ? 'Dr' : 'Cr'}`
+                      : '₹0'}
                   </td>
                 </tr>
 
@@ -330,7 +351,7 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        txn.drAmount > 0 ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'
+                        txn.drAmount > 0 ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'
                       }`}>
                         {txn.voucherType}
                       </span>
@@ -346,54 +367,59 @@ const PartyDetail: React.FC<PartyDetailProps> = ({
                     <td className="px-4 py-3 text-right font-medium text-blue-700">
                       {txn.drAmount > 0 ? fmt(txn.drAmount) : '-'}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-green-700">
+                    <td className="px-4 py-3 text-right font-medium text-emerald-700">
                       {txn.crAmount > 0 ? fmt(txn.crAmount) : '-'}
                     </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-700">
-                      {fmt(txn.balance)}
+                    <td className="px-4 py-3 text-right text-xs font-semibold">
+                      <span className={txn.balance < 0 ? 'text-blue-700' : txn.balance > 0 ? 'text-emerald-700' : 'text-gray-400'}>
+                        {txn.balance !== 0
+                          ? `${fmt(txn.balance)} ${txn.balance < 0 ? 'Dr' : 'Cr'}`
+                          : '₹0'}
+                      </span>
                     </td>
                   </tr>
                 ))}
 
                 {/* Closing balance row */}
-                <tr className={type === 'receivable' ? 'bg-emerald-50' : 'bg-red-50'}>
-                  <td colSpan={6} className={`px-4 py-2 text-xs font-medium ${accentText}`}>
-                    Closing Balance (Net Outstanding)
+                <tr className="bg-gray-50 font-semibold">
+                  <td colSpan={4} className="px-4 py-2 text-xs text-gray-600">
+                    Closing Balance
                   </td>
-                  <td className={`px-4 py-2 text-right text-sm font-bold ${accentText}`}>
-                    {fmt(outstanding)}
+                  <td className="px-4 py-2 text-right text-xs text-blue-700">
+                    {totalDr > 0 ? fmt(totalDr) : '-'}
+                  </td>
+                  <td className="px-4 py-2 text-right text-xs text-emerald-700">
+                    {totalCr > 0 ? fmt(totalCr) : '-'}
+                  </td>
+                  <td className="px-4 py-2 text-right text-xs font-bold">
+                    <span className={closingBal < 0 ? 'text-blue-700' : closingBal > 0 ? 'text-emerald-700' : 'text-gray-400'}>
+                      {closingBal !== 0
+                        ? `${fmt(closingBal)} ${closingBal < 0 ? 'Dr' : 'Cr'}`
+                        : '₹0'}
+                    </span>
                   </td>
                 </tr>
               </tbody>
-
-              <tfoot className="bg-gray-100 border-t-2 border-gray-300 text-xs font-semibold">
-                <tr>
-                  <td colSpan={4} className="px-4 py-3 text-gray-600">
-                    Period Total - {transactions.length} entries
-                  </td>
-                  <td className="px-4 py-3 text-right text-blue-700 font-bold">{fmt(totalDr)}</td>
-                  <td className="px-4 py-3 text-right text-green-700 font-bold">{fmt(totalCr)}</td>
-                  <td className={`px-4 py-3 text-right font-bold text-base ${accentText}`}>
-                    {fmt(outstanding)}
-                  </td>
-                </tr>
-              </tfoot>
             </table>
           </div>
         )}
       </div>
 
-      {/* Voucher detail modal */}
+      {/* Voucher Modal */}
       {modalOpen && (
         <VoucherModal
           loading={modalLoading}
-          voucher={modalVoucher}
           error={modalError}
-          onClose={() => { setModalOpen(false); setModalVoucher(null); setModalError(null); }}
+          voucher={modalVoucher}
+          onClose={() => {
+            setModalOpen(false);
+            setModalVoucher(null);
+            setModalError(null);
+          }}
         />
       )}
     </div>
   );
 };
 
-export default PartyDetail;
+export default LedgerStatement;

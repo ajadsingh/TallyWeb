@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useCompany } from '../../context/CompanyContext';
 import { useGlobalDateRange } from '../../context/GlobalDateRangeContext';
 import ExpensesApiService, {
@@ -36,7 +36,8 @@ const ExpensesModule: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
 
-  const api = new ExpensesApiService();
+  const apiRef = useRef(new ExpensesApiService());
+  const api = apiRef.current;
 
   // ── Initial load & re-fetch when global date range changes ─────────────
   useEffect(() => {

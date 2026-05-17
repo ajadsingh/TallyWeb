@@ -13,6 +13,7 @@ import SettingsModule from './modules/settings/SettingsModule';
 import OutstandingModule from './modules/outstanding/OutstandingModule';
 import ExpensesModule from './modules/expenses/ExpensesModule';
 import ReportsModule from './modules/reports/ReportsModule';
+import PaymentsModule from './modules/payments/PaymentsModule';
 import { DashboardProvider } from './context/DashboardContext';
 import { CompanyProvider } from './context/CompanyContext';
 import CompanySelection from './components/CompanySelection';
@@ -157,11 +158,12 @@ function App() {
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/sales" element={<SalesModule />} />
                     <Route path="/purchases" element={<PurchasesModule />} />
+                    <Route path="/payments" element={<PaymentsModule />} />
                     <Route path="/inventory" element={<InventoryModule />} />
                     <Route path="/expenses" element={<ExpensesModule />} />
                     <Route path="/reports" element={<ReportsModule />} />
                     <Route path="/gst" element={<PlaceholderModule title="GST Management" description="Handle GST calculations and filings" />} />
-                    <Route path="/ledger" element={<LedgerModule serverUrl={serverUrl || ''} />} />
+                    <Route path="/ledger" element={<LedgerModule />} />
                     <Route path="/outstanding" element={<OutstandingModule />} />
                     <Route path="/company" element={<CompanyModule />} />
                     <Route path="/settings/*" element={<SettingsModule />} />

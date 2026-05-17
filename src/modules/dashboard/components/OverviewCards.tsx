@@ -1,23 +1,18 @@
 import React from 'react';
-import { TrendingUp, TrendingDown, ShoppingCart, Package, CreditCard, Wallet, Calculator, DollarSign, RefreshCw, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Package, CreditCard, TrendingUp, Users, Wallet, RefreshCw, AlertCircle } from 'lucide-react';
 import { useDashboardContext } from '../../../context/DashboardContext';
 import { formatCurrency } from '../../../shared/utils/formatters';
 
 const OverviewCards: React.FC = () => {
-  const { data, loading, error, refreshData } = useDashboardContext();
+  const { summary, loading, error, refreshData } = useDashboardContext();
 
-  // Show loading state
-  if (loading) {
+  if (loading || !summary) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div
-            key={index}
-            className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 animate-pulse"
-          >
+          <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 animate-pulse">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-              <div className="w-16 h-4 bg-gray-200 rounded"></div>
             </div>
             <div className="w-24 h-4 bg-gray-200 rounded mb-2"></div>
             <div className="w-32 h-8 bg-gray-200 rounded"></div>
@@ -27,7 +22,6 @@ const OverviewCards: React.FC = () => {
     );
   }
 
-  // Show error state with retry option
   if (error) {
     return (
       <div className="bg-white rounded-xl p-8 shadow-sm border border-red-200 text-center">
@@ -45,114 +39,31 @@ const OverviewCards: React.FC = () => {
     );
   }
 
-  // Return loading if data is not available yet
-  if (!data || !data.overview) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div
-            key={index}
-            className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 animate-pulse"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-gray-200 rounded-lg"></div>
-              <div className="w-16 h-4 bg-gray-200 rounded"></div>
-            </div>
-            <div className="w-24 h-4 bg-gray-200 rounded mb-2"></div>
-            <div className="w-32 h-8 bg-gray-200 rounded"></div>
-          </div>
-        ))}
-      </div>
-    );
-  }
+  const isProfit = summary.netProfit >= 0;
+  const liquidCash = summary.cashInHand + summary.bankBalance;
 
   const cards = [
-    {
-      title: 'Total Sales',
-      value: data.overview.totalSales,
-      change: '+12.5%',
-      trend: 'up',
-      icon: ShoppingCart,
-      color: 'green'
-    },
-    {
-      title: 'Total Purchases',
-      value: data.overview.totalPurchases,
-      change: '+8.2%',
-      trend: 'up',
-      icon: Package,
-      color: 'blue'
-    },
-    {
-      title: 'Total Expenses',
-      value: data.overview.totalExpenses,
-      change: '-3.1%',
-      trend: 'down',
-      icon: CreditCard,
-      color: 'amber'
-    },
-    {
-      title: 'Net Profit',
-      value: data.overview.netProfit,
-      change: '+15.8%',
-      trend: 'up',
-      icon: DollarSign,
-      color: 'green'
-    },
-    {
-      title: 'GST Payable',
-      value: data.overview.gstPayable,
-      change: '+5.4%',
-      trend: 'up',
-      icon: Calculator,
-      color: 'red'
-    },
-    {
-      title: 'Cash & Bank',
-      value: data.overview.cashBank,
-      change: '+7.2%',
-      trend: 'up',
-      icon: Wallet,
-      color: 'purple'
-    }
+    { title: 'Total Sales',      value: summary.totalSales,          icon: ShoppingCart, colorClass: 'bg-green-50 border-green-200 text-green-600',   prefix: '' },
+    { title: 'Total Purchases',  value: summary.totalPurchases,      icon: Package,      colorClass: 'bg-blue-50 border-blue-200 text-blue-600',    prefix: '' },
+    { title: 'Total Expenses',   value: summary.totalExpenses,       icon: CreditCard,   colorClass: 'bg-orange-50 border-orange-200 text-orange-600', prefix: '' },
+    { title: 'Net Profit / Loss',value: Math.abs(summary.netProfit), icon: TrendingUp,   colorClass: isProfit ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-red-50 border-red-200 text-red-600', prefix: isProfit ? '' : '-' },
+    { title: 'Total Receivables',value: summary.totalReceivables,    icon: Users,        colorClass: 'bg-amber-50 border-amber-200 text-amber-600',   prefix: '' },
+    { title: 'Cash & Bank',      value: liquidCash,                  icon: Wallet,       colorClass: 'bg-purple-50 border-purple-200 text-purple-600', prefix: '' },
   ];
-
-  const getColorClasses = (color: string) => {
-    const colors = {
-      green: 'bg-green-50 border-green-200 text-green-700',
-      blue: 'bg-blue-50 border-blue-200 text-blue-700',
-      amber: 'bg-amber-50 border-amber-200 text-amber-700',
-      red: 'bg-red-50 border-red-200 text-red-700',
-      purple: 'bg-purple-50 border-purple-200 text-purple-700'
-    };
-    return colors[color as keyof typeof colors];
-  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
       {cards.map((card, index) => {
         const Icon = card.icon;
-        const TrendIcon = card.trend === 'up' ? TrendingUp : TrendingDown;
-        
         return (
-          <div
-            key={index}
-            className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
-          >
+          <div key={index} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-lg border ${getColorClasses(card.color)}`}>
-                <Icon size={24} />
-              </div>
-              <div className={`flex items-center space-x-1 text-sm font-medium ${
-                card.trend === 'up' ? 'text-green-600' : 'text-red-600'
-              }`}>
-                <TrendIcon size={16} />
-                <span>{card.change}</span>
+              <div className={`p-3 rounded-lg border ${card.colorClass}`}>
+                <Icon size={22} />
               </div>
             </div>
-            
-            <h3 className="text-gray-600 text-sm font-medium mb-1">{card.title}</h3>
-            <p className="text-2xl font-bold text-gray-800">{formatCurrency(card.value)}</p>
+            <p className="text-sm font-medium text-gray-600 mb-1">{card.title}</p>
+            <p className="text-2xl font-bold text-gray-800">{card.prefix}{formatCurrency(card.value)}</p>
           </div>
         );
       })}

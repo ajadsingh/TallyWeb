@@ -14,6 +14,7 @@ import {
   LogOut,
   Wallet,
   MoreHorizontal,
+  ArrowLeftRight,
 } from 'lucide-react';
 import AppConfigService from '../../services/config/appConfig';
 
@@ -159,6 +160,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
       }
     },
     {
+      label: "Payments",
+      id: "payments",
+      icon: <ArrowLeftRight className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "payments" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
+      onClick: () => {
+        onViewChange('payments');
+        if (isMobile) setOpen(false);
+      }
+    },,
+    {
       label: "Inventory",
       id: "inventory",
       icon: <Package className={cn("h-5 w-5 shrink-0 transition-colors", currentView === "inventory" ? "text-blue-600 dark:text-blue-400" : "text-neutral-700 dark:text-neutral-200")} />,
@@ -236,20 +246,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
   type NavItem = { id: string; label: string; Icon: React.ComponentType<{ className?: string }> };
 
   const BOTTOM_NAV_PRIMARY: NavItem[] = [
-    { id: 'dashboard',   label: 'Home',        Icon: BarChart3   },
+    { id: 'dashboard',   label: 'Home',        Icon: BarChart3    },
     { id: 'sales',       label: 'Sales',       Icon: ShoppingCart },
-    { id: 'purchases',   label: 'Purchases',   Icon: Package     },
-    { id: 'outstanding', label: 'Outstanding', Icon: Wallet      },
+    { id: 'payments',    label: 'Payments',    Icon: ArrowLeftRight },
+    { id: 'outstanding', label: 'Outstanding', Icon: Wallet       },
   ];
 
   const MORE_NAV_ITEMS: NavItem[] = [
-    { id: 'inventory', label: 'Inventory', Icon: Package    },
-    { id: 'expenses',  label: 'Expenses',  Icon: CreditCard },
-    { id: 'ledger',    label: 'Ledger',    Icon: BookOpen   },
-    { id: 'reports',   label: 'Reports',   Icon: FileText   },
-    { id: 'gst',       label: 'GST',       Icon: Calculator },
-    { id: 'company',   label: 'Company',   Icon: Building2  },
-    { id: 'settings',  label: 'Settings',  Icon: Settings   },
+    { id: 'purchases', label: 'Purchases', Icon: Package       },
+    { id: 'inventory', label: 'Inventory', Icon: Package       },
+    { id: 'expenses',  label: 'Expenses',  Icon: CreditCard    },
+    { id: 'ledger',    label: 'Ledger',    Icon: BookOpen      },
+    { id: 'reports',   label: 'Reports',   Icon: FileText      },
+    { id: 'gst',       label: 'GST',       Icon: Calculator    },
+    { id: 'company',   label: 'Company',   Icon: Building2     },
+    { id: 'settings',  label: 'Settings',  Icon: Settings      },
   ];
 
   return (

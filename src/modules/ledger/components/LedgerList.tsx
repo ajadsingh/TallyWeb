@@ -1,305 +1,190 @@
-import React, { useState, useMemo } from 'react';
-import { Search, BookOpen, TrendingUp, TrendingDown, RefreshCw, ChevronRight, Clock, SlidersHorizontal, Check, X, AlertCircle } from 'lucide-react';
+﻿import React, { useState, useMemo } from 'react';
+import { RefreshCw, Search, ChevronUp, ChevronDown, BookOpen } from 'lucide-react';
 import { TallyLedger } from '../../../services/api/ledger/ledgerApiService';
 
-// ── Avatar colour helpers ─────────────────────────────────────────────────
-const AVATAR_COLORS = [
-  'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-orange-500',
-  'bg-pink-500',  'bg-cyan-500',   'bg-amber-500',  'bg-indigo-500',
-];
-const getAvatarColor = (name: string) =>
-  AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
-
-type FilterType = 'all' | 'positive' | 'negative';
-type SortType = 'name-asc' | 'name-desc' | 'balance-high' | 'balance-low';
-
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.abs(amount));
-
-const formatLastFetch = (ts: number | null) => {
-  if (!ts) return 'Never';
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'Just now';
-  if (m < 60) return `${m}m ago`;
-  return `${Math.floor(m / 60)}h ago`;
-};
-
 interface LedgerListProps {
-  cachedLedgers: TallyLedger[];
-  isLoading: boolean;
-  loadError: string | null;
-  onLedgerSelect: (ledger: TallyLedger) => void;
+  ledgers: TallyLedger[];
+  loading: boolean;
+  onSelect: (ledger: TallyLedger) => void;
   onRefresh: () => void;
-  lastFetchTime: number | null;
 }
 
-const SORT_OPTIONS: { key: SortType; label: string }[] = [
-  { key: 'name-asc',     label: 'Name A → Z' },
-  { key: 'name-desc',    label: 'Name Z → A' },
-  { key: 'balance-high', label: 'Balance High → Low' },
-  { key: 'balance-low',  label: 'Balance Low → High' },
-];
+type SortKey = 'name' | 'parent' | 'opening' | 'closing';
+type SortDir = 'asc' | 'desc';
 
-const LedgerList: React.FC<LedgerListProps> = ({
-  cachedLedgers, isLoading, loadError, onLedgerSelect, onRefresh, lastFetchTime,
-}) => {
-  const [searchTerm, setSearchTerm]       = useState('');
-  const [filter, setFilter]               = useState<FilterType>('all');
-  const [sort, setSort]                   = useState<SortType>('name-asc');
-  const [showSortSheet, setShowSortSheet] = useState(false);
+const fmt = (n: number) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(Math.abs(n));
 
-  const stats = useMemo(() => ({
-    total: cachedLedgers.length,
-    dr:    cachedLedgers.filter(l => l.closingBalance > 0).length,
-    cr:    cachedLedgers.filter(l => l.closingBalance < 0).length,
-    zero:  cachedLedgers.filter(l => l.closingBalance === 0).length,
-  }), [cachedLedgers]);
-
-  const displayed = useMemo(() => {
-    let list = [...cachedLedgers];
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      list = list.filter(l =>
-        l.name.toLowerCase().includes(q) ||
-        l.parent.toLowerCase().includes(q));
-    }
-    if (filter === 'dr') list = list.filter(l => l.closingBalance > 0);
-    if (filter === 'cr') list = list.filter(l => l.closingBalance < 0);
-    list.sort((a, b) => {
-      if (sort === 'name-asc')     return a.name.localeCompare(b.name);
-      if (sort === 'name-desc')    return b.name.localeCompare(a.name);
-      if (sort === 'balance-high') return Math.abs(b.closingBalance) - Math.abs(a.closingBalance);
-      return Math.abs(a.closingBalance) - Math.abs(b.closingBalance);
-    });
-    return list;
-  }, [cachedLedgers, searchTerm, filter, sort]);
-
-  // ── Loading skeleton ──────────────────────────────────────────────────
-  if (isLoading) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="px-4 sm:px-6 pt-5 pb-3 flex-shrink-0">
-          <div className="h-7 w-44 bg-gray-200 rounded-lg animate-pulse" />
-          <div className="h-4 w-28 bg-gray-100 rounded mt-2 animate-pulse" />
-        </div>
-        <div className="px-4 sm:px-6 pb-3 grid grid-cols-4 gap-2">
-          {[1,2,3,4].map(i => (
-            <div key={i} className="h-16 bg-gray-100 rounded-2xl animate-pulse" />
-          ))}
-        </div>
-        <div className="px-4 sm:px-6 pb-4">
-          <div className="h-10 bg-gray-100 rounded-xl animate-pulse" />
-        </div>
-        <div className="flex-1 px-4 sm:px-6">
-          <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-50 overflow-hidden">
-            {[1,2,3,4,5,6].map(i => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3.5 animate-pulse">
-                <div className="h-10 w-10 rounded-xl bg-gray-200 shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 bg-gray-200 rounded w-3/5" />
-                  <div className="h-2.5 bg-gray-100 rounded w-2/5" />
-                </div>
-                <div className="h-3 bg-gray-200 rounded w-16 shrink-0" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+const BalanceCell: React.FC<{ amount: number }> = ({ amount }) => {
+  if (amount === 0) {
+    return <span className="text-gray-400">{'-'}</span>;
   }
+  const isDr = amount < 0;
+  return (
+    <span className={isDr ? 'text-blue-700 font-semibold' : 'text-emerald-700 font-semibold'}>
+      {fmt(amount)}{' '}
+      <span className={`text-xs font-normal rounded px-1 py-0.5 ${
+        isDr ? 'bg-blue-50 text-blue-500' : 'bg-emerald-50 text-emerald-600'
+      }`}>
+        {isDr ? 'Dr' : 'Cr'}
+      </span>
+    </span>
+  );
+};
 
-  // ── Load error ────────────────────────────────────────────────────────
-  if (loadError) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 min-h-[60vh] px-6">
-        <div className="h-16 w-16 bg-red-50 rounded-2xl flex items-center justify-center">
-          <AlertCircle className="w-8 h-8 text-red-400" />
-        </div>
-        <div className="text-center">
-          <p className="font-semibold text-gray-800">Failed to load ledgers</p>
-          <p className="text-xs text-gray-500 mt-1 max-w-xs">{loadError}</p>
-        </div>
-        <button
-          onClick={onRefresh}
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold"
-        >
-          <RefreshCw className="w-4 h-4" /> Retry
-        </button>
-      </div>
-    );
-  }
+const SortIcon: React.FC<{ col: SortKey; active: SortKey; dir: SortDir }> = ({ col, active, dir }) => {
+  if (col !== active) return <ChevronUp className="w-3 h-3 text-gray-300" />;
+  return dir === 'asc'
+    ? <ChevronUp   className="w-3 h-3 text-blue-500" />
+    : <ChevronDown className="w-3 h-3 text-blue-500" />;
+};
 
-  // ── Empty state ───────────────────────────────────────────────────────
-  if (cachedLedgers.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 min-h-[60vh] px-6">
-        <div className="h-16 w-16 bg-gray-100 rounded-2xl flex items-center justify-center">
-          <BookOpen className="w-8 h-8 text-gray-300" />
-        </div>
-        <div className="text-center">
-          <p className="font-semibold text-gray-800">No Ledgers Found</p>
-          <p className="text-sm text-gray-500 mt-1">No ledger accounts found for this company.</p>
-        </div>
-        <button
-          onClick={onRefresh}
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold"
-        >
-          <RefreshCw className="w-4 h-4" /> Refresh
-        </button>
-      </div>
-    );
-  }
+const LedgerList: React.FC<LedgerListProps> = ({ ledgers, loading, onSelect, onRefresh }) => {
+  const [search,  setSearch]  = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [parentFilter, setParentFilter] = useState('');
+
+  const parents = useMemo(
+    () => ['', ...new Set(ledgers.map(l => l.parent).filter(Boolean))].sort(),
+    [ledgers]
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return ledgers
+      .filter(l => {
+        const matchSearch = !q || l.name.toLowerCase().includes(q) || l.parent.toLowerCase().includes(q);
+        const matchParent = !parentFilter || l.parent === parentFilter;
+        return matchSearch && matchParent;
+      })
+      .sort((a, b) => {
+        let cmp = 0;
+        if (sortKey === 'name')    cmp = a.name.localeCompare(b.name);
+        if (sortKey === 'parent')  cmp = a.parent.localeCompare(b.parent);
+        if (sortKey === 'opening') cmp = Math.abs(a.openingBalance) - Math.abs(b.openingBalance);
+        if (sortKey === 'closing') cmp = Math.abs(a.closingBalance) - Math.abs(b.closingBalance);
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+  }, [ledgers, search, parentFilter, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (key === sortKey) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const thClass = (key: SortKey) =>
+    `px-4 py-3 text-left text-xs uppercase tracking-wide font-medium select-none cursor-pointer whitespace-nowrap transition-colors ${
+      sortKey === key ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+    }`;
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
 
-      {/* Header */}
-      <div className="px-4 sm:px-6 pt-5 pb-3 flex-shrink-0 flex items-start justify-between">
-        <div>
-          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Ledger Accounts</h1>
-          <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
-            <Clock className="w-3 h-3" /> {formatLastFetch(lastFetchTime)}
-          </p>
-        </div>
-        <button
-          onClick={onRefresh}
-          className="h-9 w-9 flex items-center justify-center border border-gray-200 rounded-xl bg-white text-gray-600 active:bg-gray-100 shrink-0"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* KPI strip */}
-      <div className="flex-shrink-0 px-4 sm:px-6 pb-3">
-        <div className="grid grid-cols-4 gap-2">
-          {[
-            { label: 'Total', value: stats.total, bg: 'bg-blue-50',  text: 'text-blue-700',  Icon: BookOpen },
-            { label: 'Dr',    value: stats.dr,    bg: 'bg-green-50', text: 'text-green-700', Icon: TrendingUp },
-            { label: 'Cr',    value: stats.cr,    bg: 'bg-red-50',   text: 'text-red-700',   Icon: TrendingDown },
-            { label: 'Zero',  value: stats.zero,  bg: 'bg-gray-100', text: 'text-gray-600',  Icon: BookOpen },
-          ].map(kpi => (
-            <div key={kpi.label} className={`${kpi.bg} rounded-2xl p-3 text-center`}>
-              <p className={`text-xl font-bold ${kpi.text}`}>{kpi.value}</p>
-              <p className={`text-[10px] font-medium ${kpi.text} opacity-75`}>{kpi.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Search + Sort */}
-      <div className="flex-shrink-0 px-4 sm:px-6 pb-2 flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search name or group…"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-8 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Search ledger or group..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          {searchTerm && (
-            <button onClick={() => setSearchTerm('')} className="absolute right-2.5 top-1/2 -translate-y-1/2">
-              <X className="w-4 h-4 text-gray-400" />
-            </button>
-          )}
         </div>
-        <button
-          onClick={() => setShowSortSheet(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gray-100 rounded-xl text-sm font-medium text-gray-600 shrink-0"
+
+        {/* Group filter */}
+        <select
+          value={parentFilter}
+          onChange={e => setParentFilter(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <SlidersHorizontal className="w-4 h-4" />
+          <option value="">All Groups</option>
+          {parents.filter(Boolean).map(p => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+
+        <p className="text-xs text-gray-400 ml-auto">
+          {filtered.length} / {ledgers.length} ledgers
+        </p>
+
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      {/* Filter pills */}
-      <div className="flex-shrink-0 px-4 sm:px-6 pb-3 flex gap-2 items-center">
-        {([['all', 'All'], ['dr', 'Debit (Dr)'], ['cr', 'Credit (Cr)']] as [FilterType, string][]).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setFilter(key)}
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-              filter === key ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-        <span className="ml-auto text-xs text-gray-400 self-center">
-          {displayed.length} result{displayed.length !== 1 ? 's' : ''}
-        </span>
-      </div>
-
-      {/* List */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-6">
-        {displayed.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16">
-            <Search className="w-10 h-10 text-gray-300" />
-            <p className="text-sm text-gray-500">No ledgers match your search</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl border border-gray-200 divide-y divide-gray-50 overflow-hidden">
-            {displayed.map((ledger, idx) => {
-              const color   = getAvatarColor(ledger.name);
-              const initial = ledger.name[0]?.toUpperCase() ?? '?';
-              const isDr    = ledger.closingBalance > 0;
-              const isCr    = ledger.closingBalance < 0;
-              return (
-                <button
-                  key={`${ledger.name}-${idx}`}
-                  type="button"
-                  onClick={() => onLedgerSelect(ledger)}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-blue-50 transition-colors"
+      {/* Table */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 gap-3">
+          <RefreshCw className="h-5 w-5 animate-spin text-blue-500" />
+          <span className="text-gray-500 text-sm">Loading ledgers from Tally...</span>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-base font-medium">No ledgers found</p>
+          <p className="text-sm mt-1">Try adjusting your search or group filter</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className={thClass('name')}   onClick={() => handleSort('name')}>
+                  <span className="flex items-center gap-1">Ledger Name <SortIcon col="name" active={sortKey} dir={sortDir} /></span>
+                </th>
+                <th className={thClass('parent')} onClick={() => handleSort('parent')}>
+                  <span className="flex items-center gap-1">Group <SortIcon col="parent" active={sortKey} dir={sortDir} /></span>
+                </th>
+                <th className={thClass('opening')} onClick={() => handleSort('opening')}>
+                  <span className="flex items-center gap-1 justify-end w-full">Opening Bal <SortIcon col="opening" active={sortKey} dir={sortDir} /></span>
+                </th>
+                <th className={thClass('closing')} onClick={() => handleSort('closing')}>
+                  <span className="flex items-center gap-1 justify-end w-full">Closing Bal <SortIcon col="closing" active={sortKey} dir={sortDir} /></span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.map((ledger, i) => (
+                <tr
+                  key={i}
+                  onClick={() => onSelect(ledger)}
+                  className="hover:bg-blue-50 transition-colors cursor-pointer"
                 >
-                  <div className={`h-10 w-10 rounded-xl ${color} flex items-center justify-center shrink-0`}>
-                    <span className="text-white font-bold text-sm">{initial}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 truncate text-[13px] leading-tight">{ledger.name}</p>
-                    <p className="text-[11px] text-gray-400 truncate mt-0.5">{ledger.parent || '—'}</p>
-                  </div>
-                  <div className="text-right shrink-0 mr-1">
-                    <p className={`text-sm font-bold ${isDr ? 'text-green-600' : isCr ? 'text-red-600' : 'text-gray-500'}`}>
-                      {formatCurrency(ledger.closingBalance)}
-                    </p>
-                    <p className={`text-[10px] mt-0.5 ${isDr ? 'text-green-400' : isCr ? 'text-red-400' : 'text-gray-400'}`}>
-                      {isCr ? 'Cr' : 'Dr'}
-                    </p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-gray-300 shrink-0" />
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Sort bottom sheet */}
-      {showSortSheet && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowSortSheet(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl px-5 pt-4 pb-8">
-            <div className="flex justify-center mb-4">
-              <div className="w-10 h-1 bg-gray-300 rounded-full" />
-            </div>
-            <h3 className="text-base font-bold text-gray-800 mb-3">Sort By</h3>
-            <div className="space-y-1">
-              {SORT_OPTIONS.map(opt => (
-                <button
-                  key={opt.key}
-                  type="button"
-                  onClick={() => { setSort(opt.key); setShowSortSheet(false); }}
-                  className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl active:bg-gray-50"
-                >
-                  <span className={`text-sm font-medium ${sort === opt.key ? 'text-blue-600' : 'text-gray-700'}`}>
-                    {opt.label}
-                  </span>
-                  {sort === opt.key && <Check className="w-4 h-4 text-blue-600" />}
-                </button>
+                  <td className="px-4 py-3">
+                    <span className="font-medium text-gray-800">{ledger.name}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {ledger.parent ? (
+                      <span className="inline-block bg-gray-100 text-gray-600 text-xs font-medium px-2 py-0.5 rounded-full">
+                        {ledger.parent}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">{'-'}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <BalanceCell amount={ledger.openingBalance} />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <BalanceCell amount={ledger.closingBalance} />
+                  </td>
+                </tr>
               ))}
-            </div>
-          </div>
-        </>
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

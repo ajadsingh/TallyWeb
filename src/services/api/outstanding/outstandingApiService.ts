@@ -16,6 +16,29 @@ export interface PartyTransaction {
   crAmount: number;     // Credit side (payment/receipt received from party)
 }
 
+export interface VoucherLedgerEntry {
+  ledgerName: string;
+  amount: number;
+  isDr: boolean;
+}
+
+export interface InventoryEntry {
+  itemName: string;
+  qty: string;    // e.g. "10 Nos"
+  rate: string;   // e.g. "100/Nos"
+  amount: number;
+}
+
+export interface VoucherDetail {
+  date: string;
+  voucherType: string;
+  voucherNumber: string;
+  narration: string;
+  partyName: string;
+  inventoryEntries: InventoryEntry[];
+  entries: VoucherLedgerEntry[];
+}
+
 export default class OutstandingApiService extends BaseApiService {
 
   /** Fetch Sundry Debtors (customers who owe us money) */
@@ -83,10 +106,7 @@ export default class OutstandingApiService extends BaseApiService {
   }
 
   /**
-   * Fetch all vouchers for a party using PARTYLEDGERNAME filter (server-side).
-   * Much faster than downloading the full Day Book.
-   * Covers: Sales, Purchase, Receipt, Payment vouchers.
-   * For Dr/Cr amounts: scans ALLLEDGERENTRIES.LIST for the party's entry.
+   * Fetch all vouchers for a party using PARTYLEDGERNAME server-side filter.
    */
   async getPartyTransactions(
     company: string,
@@ -145,33 +165,31 @@ export default class OutstandingApiService extends BaseApiService {
       let drAmt = 0;
       let crAmt = 0;
 
-      // Scan ALLLEDGERENTRIES.LIST for this party's entry
-      Array.from(v.getElementsByTagName('ALLLEDGERENTRIES.LIST')).forEach(entry => {
+      // Check both ALLLEDGERENTRIES.LIST (TDL collection) AND LEDGERENTRIES.LIST (Day Book)
+      const allEntryNodes = [
+        ...Array.from(v.getElementsByTagName('ALLLEDGERENTRIES.LIST')),
+        ...Array.from(v.getElementsByTagName('LEDGERENTRIES.LIST')),
+      ];
+
+      allEntryNodes.forEach(entry => {
         const lName = entry.getElementsByTagName('LEDGERNAME')[0]?.textContent?.trim() ?? '';
         if (lName.toLowerCase() !== partyLower) return;
 
-        const amt              = parseFloat(entry.getElementsByTagName('AMOUNT')[0]?.textContent ?? '0') || 0;
-        const isDeemedPositive = entry.getElementsByTagName('ISDEEMEDPOSITIVE')[0]?.textContent?.trim().toLowerCase() === 'yes';
+        const rawAmt = parseFloat(entry.getElementsByTagName('AMOUNT')[0]?.textContent ?? '0') || 0;
+        if (rawAmt === 0) return;
 
-        // Tally sign convention:
-        //   ISDEEMEDPOSITIVE=Yes  â†’ Debit entry  (Dr) - party owes us more / we owe vendor more
-        //   ISDEEMEDPOSITIVE=No   â†’ Credit entry (Cr) - payment received / payment made
-        if (isDeemedPositive) drAmt += Math.abs(amt);
-        else                   crAmt += Math.abs(amt);
+        const dpTag = entry.getElementsByTagName('ISDEEMEDPOSITIVE')[0]?.textContent?.trim().toLowerCase();
+        let isDr: boolean;
+        if (dpTag === 'yes')     isDr = true;
+        else if (dpTag === 'no') isDr = false;
+        else                     isDr = rawAmt < 0;
+
+        if (isDr) drAmt += Math.abs(rawAmt);
+        else      crAmt += Math.abs(rawAmt);
       });
 
-      // If ALLLEDGERENTRIES didn't have the party entry (some Tally versions omit it),
-      // fall back to voucher-level amount + classify by voucher type
-      if (drAmt === 0 && crAmt === 0) {
-        const vAmt  = Math.abs(parseFloat(v.getElementsByTagName('AMOUNT')[0]?.textContent ?? '0') || 0);
-        const lower = voucherType.toLowerCase();
-        if (lower.includes('sales') || lower.includes('purchase') || lower.includes('debit note') || lower.includes('credit note')) {
-          drAmt = vAmt;
-        } else {
-          crAmt = vAmt;
-        }
-      }
-
+      // Party NOT found in this voucher's ledger entries - skip entirely.
+      // Do NOT fall back to adding all vouchers; that would pollute every party's transaction list.
       if (drAmt === 0 && crAmt === 0) return;
 
       txns.push({ date, voucherType, voucherNumber, narration, drAmount: drAmt, crAmount: crAmt });
@@ -180,13 +198,155 @@ export default class OutstandingApiService extends BaseApiService {
     return txns.sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Helpers
 
   private cleanXmlStr(xml: string): string {
     return xml
+      // Fix unescaped & (party names like "ABC & Co") — must be first
+      .replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;')
       .replace(/&#([0-8]|1[1-2]|1[4-9]|2[0-9]|3[01]);/g, '')
       .replace(/&#x[0-8A-Fa-f];/gi, '')
       // eslint-disable-next-line no-control-regex
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+  }
+
+  /**
+   * Fetch the full ledger breakdown of a single voucher.
+   * Uses Day Book for the exact date (1-day range) — no TDL FILTER to avoid
+   * Tally c0000005 memory access violation crash.
+   * Client-side picks the matching voucher by number.
+   */
+  async getVoucherDetail(
+    company: string,
+    voucherNumber: string,
+    date: string,        // YYYYMMDD
+    voucherType?: string // optional — used as secondary filter to avoid wrong-voucher match
+  ): Promise<VoucherDetail | null> {
+    const xml = `<ENVELOPE>
+  <HEADER>
+    <VERSION>1</VERSION>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>Day Book</ID>
+  </HEADER>
+  <BODY>
+    <DESC>
+      <STATICVARIABLES>
+        <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
+        <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
+        <SVFROMDATE TYPE="Date">${date}</SVFROMDATE>
+        <SVTODATE TYPE="Date">${date}</SVTODATE>
+        <EXPLODEFLAG>Yes</EXPLODEFLAG>
+      </STATICVARIABLES>
+    </DESC>
+  </BODY>
+</ENVELOPE>`;
+
+    const response = await this.makeRequest(xml);
+    return this.parseVoucherDetail(response, voucherNumber, voucherType);
+  }
+
+  private parseVoucherDetail(xmlText: string, voucherNumber: string, voucherType?: string): VoucherDetail | null {
+    const norm   = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+    const target = norm(voucherNumber);
+
+    // Block-split: parse each <VOUCHER> independently so one bad block
+    // doesn't prevent finding the correct voucher.
+    const OPEN  = '<VOUCHER';
+    const CLOSE = '</VOUCHER>';
+    const upper = xmlText.toUpperCase();
+    let pos = 0;
+
+    while (true) {
+      const start = upper.indexOf(OPEN, pos);
+      if (start === -1) break;
+      const end = upper.indexOf(CLOSE, start);
+      if (end === -1) break;
+      const chunk = xmlText.slice(start, end + CLOSE.length);
+      pos = end + CLOSE.length;
+
+      try {
+        const cleaned = this.cleanXmlStr(chunk);
+        const doc = this.parseXML(`<R>${cleaned}</R>`);
+        if (doc.querySelector('parsererror')) continue;
+
+        const v = doc.getElementsByTagName('VOUCHER')[0];
+        if (!v) continue;
+
+        // Check if this is the voucher we want
+        const rawNum = v.getElementsByTagName('VOUCHERNUMBER')[0]?.textContent?.trim() ?? '';
+        const n      = norm(rawNum);
+
+        // Strict match: both must be non-empty; exact match preferred;
+        // substring match only when both parts are meaningfully long (>=5 chars)
+        if (n === '' || target === '') continue;
+        const numMatched =
+          n === target ||
+          (n.length >= 5 && target.length >= 5 && (n.includes(target) || target.includes(n)));
+        if (!numMatched) continue;
+
+        // Optional secondary filter: voucherType (prevents same-day, same-number false positives)
+        if (voucherType && voucherType.trim() !== '') {
+          const xmlType = (v.getAttribute('VCHTYPE') || v.getElementsByTagName('VOUCHERTYPENAME')[0]?.textContent || '').trim().toLowerCase();
+          const wantType = voucherType.trim().toLowerCase();
+          // Allow if one name contains the other (handles "Sales" vs "Tax Invoice")
+          const typeOk = xmlType === wantType || xmlType.includes(wantType) || wantType.includes(xmlType);
+          if (!typeOk) continue;
+        }
+
+        // ── Extract fields ───────────────────────────────────────────────────
+        const gt = (tag: string) => v.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
+
+        const date          = gt('DATE');
+        const voucherNumXml = rawNum || voucherNumber;
+        const xmlVoucherType = (v.getAttribute('VCHTYPE') || gt('VOUCHERTYPENAME')).trim();
+        const narration     = gt('NARRATION') || gt('BASICNARRATION');
+        const partyName     = gt('PARTYLEDGERNAME') || gt('BASICBUYERNAME') || gt('PARTYNAME');
+
+        // ── Inventory entries ─────────────────────────────────────────────────
+        const inventoryEntries: InventoryEntry[] = [];
+        const invNodes = [
+          ...Array.from(v.getElementsByTagName('INVENTORYENTRIES.LIST')),
+          ...Array.from(v.getElementsByTagName('ALLINVENTORYENTRIES.LIST')),
+        ];
+        invNodes.forEach(node => {
+          const itemName = node.getElementsByTagName('STOCKITEMNAME')[0]?.textContent?.trim() ?? '';
+          if (!itemName) return;
+          const qty    = node.getElementsByTagName('ACTUALQTY')[0]?.textContent?.trim()
+                      ?? node.getElementsByTagName('BILLEDQTY')[0]?.textContent?.trim()
+                      ?? '';
+          const rate   = node.getElementsByTagName('RATE')[0]?.textContent?.trim() ?? '';
+          const rawAmt = parseFloat(node.getElementsByTagName('AMOUNT')[0]?.textContent ?? '0') || 0;
+          inventoryEntries.push({ itemName, qty, rate, amount: Math.abs(rawAmt) });
+        });
+
+        // ── Ledger entries ────────────────────────────────────────────────────
+        const entries: VoucherLedgerEntry[] = [];
+        const entryNodes = [
+          ...Array.from(v.getElementsByTagName('LEDGERENTRIES.LIST')),
+          ...Array.from(v.getElementsByTagName('ALLLEDGERENTRIES.LIST')),
+        ];
+        entryNodes.forEach(entry => {
+          const ledgerName = entry.getElementsByTagName('LEDGERNAME')[0]?.textContent?.trim() ?? '';
+          if (!ledgerName) return;
+          const rawAmt = parseFloat(entry.getElementsByTagName('AMOUNT')[0]?.textContent ?? '0') || 0;
+          if (rawAmt === 0) return;
+          const dpTag = entry.getElementsByTagName('ISDEEMEDPOSITIVE')[0]?.textContent?.trim().toLowerCase();
+          let isDr: boolean;
+          if (dpTag === 'yes')     isDr = true;
+          else if (dpTag === 'no') isDr = false;
+          else                     isDr = rawAmt < 0;
+          entries.push({ ledgerName, amount: Math.abs(rawAmt), isDr });
+        });
+
+        return { date, voucherType: xmlVoucherType, voucherNumber: voucherNumXml, narration, partyName, inventoryEntries, entries };
+
+      } catch {
+        // skip malformed block, keep searching
+      }
+    }
+
+    // No matching voucher found in any block
+    return null;
   }
 }

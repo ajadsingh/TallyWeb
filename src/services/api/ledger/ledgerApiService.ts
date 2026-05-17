@@ -1,53 +1,42 @@
-import BaseApiService from '../baseApiService';
+﻿import BaseApiService from '../baseApiService';
 
 export interface TallyLedger {
   name: string;
-  id: string;
   parent: string;
-  taxType: string;
-  isBillWiseOn: boolean;
-  isCostCentresOn: boolean;
-  isRevenue: boolean;
-  isDeemedPositive: boolean;
-  canDelete: boolean;
-  forPayroll: boolean;
-  masterId: number;
-  closingBalance: number;
   openingBalance: number;
+  closingBalance: number;
 }
 
-export interface LedgerDetail extends TallyLedger {
-  // Additional fields that might come from detailed API
-  [key: string]: any;
+export interface LedgerTransaction {
+  date: string;         // YYYYMMDD
+  voucherType: string;
+  voucherNumber: string;
+  narration: string;
+  drAmount: number;
+  crAmount: number;
 }
 
 export default class LedgerApiService extends BaseApiService {
-  /**
-   * Get list of all ledgers from Tally
-   */
-  async getLedgerList(companyName: string): Promise<TallyLedger[]> {
-    const xmlRequest = `
-<ENVELOPE>
+
+  /** Fetch all ledgers with opening/closing balance */
+  async getLedgerList(company: string): Promise<TallyLedger[]> {
+    const xml = `<ENVELOPE>
   <HEADER>
     <VERSION>1</VERSION>
     <TALLYREQUEST>Export</TALLYREQUEST>
     <TYPE>Collection</TYPE>
-    <ID>List of Ledgers</ID>
+    <ID>AllLedgers</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>
-        <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
+        <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>
-          <COLLECTION NAME="List of Ledgers">
+          <COLLECTION NAME="AllLedgers">
             <TYPE>Ledger</TYPE>
-            <FETCH>Name</FETCH>
-            <FETCH>Parent</FETCH>
-            <FETCH>OpeningBalance</FETCH>
-            <FETCH>ClosingBalance</FETCH>
-            <FETCH>MasterId</FETCH>
+            <FETCH>NAME, PARENT, OPENINGBALANCE, CLOSINGBALANCE</FETCH>
           </COLLECTION>
         </TDLMESSAGE>
       </TDL>
@@ -55,158 +44,137 @@ export default class LedgerApiService extends BaseApiService {
   </BODY>
 </ENVELOPE>`;
 
-    try {
-      const response = await this.makeRequest(xmlRequest);
-      return this.parseLedgerList(response);
-    } catch (error) {
-      throw error;
-    }
+    const response = await this.makeRequest(xml);
+    return this.parseLedgerList(response);
   }
 
-  /**
-   * Get detailed information about a specific ledger
-   */
-  async getLedgerDetails(ledgerName: string, companyName: string): Promise<LedgerDetail> {
-    const xmlRequest = `
-<ENVELOPE>
+  /** Fetch transactions for a specific ledger using Day Book (safe â€” no TDL filter crash) */
+  async getLedgerTransactions(
+    company: string,
+    ledgerName: string,
+    fromDate: string,  // YYYYMMDD
+    toDate: string     // YYYYMMDD
+  ): Promise<LedgerTransaction[]> {
+    const xml = `<ENVELOPE>
   <HEADER>
     <VERSION>1</VERSION>
-    <TALLYREQUEST>EXPORT</TALLYREQUEST>
-    <TYPE>OBJECT</TYPE>
-    <SUBTYPE>Ledger</SUBTYPE>
-    <ID TYPE="Name">${ledgerName}</ID>
+    <TALLYREQUEST>Export</TALLYREQUEST>
+    <TYPE>Data</TYPE>
+    <ID>Day Book</ID>
   </HEADER>
   <BODY>
     <DESC>
       <STATICVARIABLES>
         <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>
-        <SVCURRENTCOMPANY>${companyName}</SVCURRENTCOMPANY>
+        <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
+        <SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>
+        <SVTODATE TYPE="Date">${toDate}</SVTODATE>
+        <EXPLODEFLAG>Yes</EXPLODEFLAG>
       </STATICVARIABLES>
-      <FETCHLIST>
-        <FETCH>Name</FETCH>
-        <FETCH>Parent</FETCH>
-        <FETCH>OpeningBalance</FETCH>
-        <FETCH>ClosingBalance</FETCH>
-        <FETCH>TaxType</FETCH>
-        <FETCH>IsBillWiseOn</FETCH>
-        <FETCH>IsCostCentresOn</FETCH>
-        <FETCH>IsRevenue</FETCH>
-        <FETCH>IsDeemedPositive</FETCH>
-        <FETCH>CanDelete</FETCH>
-        <FETCH>ForPayroll</FETCH>
-        <FETCH>MasterId</FETCH>
-      </FETCHLIST>
     </DESC>
   </BODY>
 </ENVELOPE>`;
 
-    try {
-      const response = await this.makeRequest(xmlRequest);
-      return this.parseLedgerDetails(response);
-    } catch (error) {
-      throw error;
-    }
+    const response = await this.makeRequest(xml);
+    return this.parseTransactions(response, ledgerName);
   }
 
-  /**
-   * Parse ledger list XML response
-   */
+  // â”€â”€â”€ Parsers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  private cleanXml(xml: string): string {
+    return xml
+      .replace(/&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;')
+      .replace(/&#([0-8]|1[1-2]|1[4-9]|2[0-9]|3[01]);/g, '')
+      .replace(/&#x[0-8A-Fa-f];/gi, '')
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+  }
+
   private parseLedgerList(xmlText: string): TallyLedger[] {
-    const doc = this.parseXML(xmlText);
-    const ledgers: TallyLedger[] = [];
+    const doc    = this.parseXML(this.cleanXml(xmlText));
+    const result: TallyLedger[] = [];
 
-    // getElementsByTagName works reliably across all Tally XML response formats
-    const ledgerNodes = Array.from(doc.getElementsByTagName('LEDGER'));
-
-    ledgerNodes.forEach(ledgerNode => {
-      try {
-        // NAME can be in getAttribute OR in a child <NAME> element
-        const name = ledgerNode.getAttribute('NAME')
-          || ledgerNode.getElementsByTagName('NAME')[0]?.textContent?.trim()
-          || '';
-        const id = ledgerNode.getAttribute('ID') || '';
-
-        const getNodeText = (tagName: string): string => {
-          const nodes = ledgerNode.getElementsByTagName(tagName);
-          return nodes.length > 0 ? (nodes[0].textContent?.trim() || '') : '';
-        };
-        const getNodeNumber  = (t: string) => this.parseAmount(getNodeText(t));
-        const getNodeBoolean = (t: string) => {
-          const v = getNodeText(t).toLowerCase();
-          return v === 'yes' || v === 'true';
-        };
-
-        if (name) {
-          ledgers.push({
-            name,
-            id,
-            parent:          getNodeText('PARENT'),
-            taxType:         getNodeText('TAXTYPE'),
-            isBillWiseOn:    getNodeBoolean('ISBILLWISEON'),
-            isCostCentresOn: getNodeBoolean('ISCOSTCENTRESON'),
-            isRevenue:       getNodeBoolean('ISREVENUE'),
-            isDeemedPositive:getNodeBoolean('ISDEEMEDPOSITIVE'),
-            canDelete:       getNodeBoolean('CANDELETE'),
-            forPayroll:      getNodeBoolean('FORPAYROLL'),
-            masterId:        parseInt(getNodeText('MASTERID')) || 0,
-            closingBalance:  getNodeNumber('CLOSINGBALANCE'),
-            openingBalance:  getNodeNumber('OPENINGBALANCE'),
-          });
-        }
-      } catch (error) {
-        console.warn('Error parsing ledger node:', error);
-      }
+    Array.from(doc.getElementsByTagName('LEDGER')).forEach(node => {
+      const name    = (node.getAttribute('NAME') || node.getElementsByTagName('NAME')[0]?.textContent || '').trim();
+      if (!name) return;
+      const parent  = node.getElementsByTagName('PARENT')[0]?.textContent?.trim() ?? '';
+      const opening = this.parseAmount(node.getElementsByTagName('OPENINGBALANCE')[0]?.textContent ?? '0');
+      const closing = this.parseAmount(node.getElementsByTagName('CLOSINGBALANCE')[0]?.textContent ?? '0');
+      result.push({ name, parent, openingBalance: opening, closingBalance: closing });
     });
 
-    return ledgers;
+    return result.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /**
-   * Parse ledger details XML response
-   */
-  private parseLedgerDetails(xmlText: string): LedgerDetail {
-    const doc = this.parseXML(xmlText);
-    
-    // Find the LEDGER element in the response
-    const ledgerNode = doc.querySelector('LEDGER');
-    
-    if (!ledgerNode) {
-      throw new Error('No ledger data found in response');
+  private parseTransactions(xmlText: string, ledgerName: string): LedgerTransaction[] {
+    const ledgerLower = ledgerName.trim().toLowerCase();
+    const txns: LedgerTransaction[] = [];
+
+    // Block-split approach: parse each VOUCHER independently
+    const OPEN  = '<VOUCHER';
+    const CLOSE = '</VOUCHER>';
+    const upper = xmlText.toUpperCase();
+    let pos = 0;
+
+    while (true) {
+      const start = upper.indexOf(OPEN, pos);
+      if (start === -1) break;
+      const end = upper.indexOf(CLOSE, start);
+      if (end === -1) break;
+      const chunk = xmlText.slice(start, end + CLOSE.length);
+      pos = end + CLOSE.length;
+
+      try {
+        const cleaned = this.cleanXml(chunk);
+        const doc = this.parseXML(`<R>${cleaned}</R>`);
+        if (doc.querySelector('parsererror')) continue;
+
+        const voucher = doc.getElementsByTagName('VOUCHER')[0];
+        if (!voucher) continue;
+
+        const gt = (tag: string) =>
+          voucher.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
+
+        const date          = gt('DATE');
+        const voucherType   = (voucher.getAttribute('VCHTYPE') || gt('VOUCHERTYPENAME')).trim();
+        const voucherNumber = gt('VOUCHERNUMBER');
+        const narration     = gt('NARRATION') || gt('BASICNARRATION');
+
+        if (!date || !voucherType) continue;
+
+        let drAmt = 0;
+        let crAmt = 0;
+
+        const entryNodes = [
+          ...Array.from(voucher.getElementsByTagName('LEDGERENTRIES.LIST')),
+          ...Array.from(voucher.getElementsByTagName('ALLLEDGERENTRIES.LIST')),
+        ];
+
+        entryNodes.forEach(entry => {
+          const lName = entry.getElementsByTagName('LEDGERNAME')[0]?.textContent?.trim() ?? '';
+          if (lName.toLowerCase() !== ledgerLower) return;
+
+          const rawAmt = parseFloat(entry.getElementsByTagName('AMOUNT')[0]?.textContent ?? '0') || 0;
+          if (rawAmt === 0) return;
+
+          const dpTag = entry.getElementsByTagName('ISDEEMEDPOSITIVE')[0]?.textContent?.trim().toLowerCase();
+          let isDr: boolean;
+          if (dpTag === 'yes')     isDr = true;
+          else if (dpTag === 'no') isDr = false;
+          else                     isDr = rawAmt < 0; // Day Book: negative = Dr
+
+          if (isDr) drAmt += Math.abs(rawAmt);
+          else      crAmt += Math.abs(rawAmt);
+        });
+
+        if (drAmt === 0 && crAmt === 0) continue;
+
+        txns.push({ date, voucherType, voucherNumber, narration, drAmount: drAmt, crAmount: crAmt });
+      } catch {
+        // skip malformed block
+      }
     }
 
-    const name = ledgerNode.getAttribute('NAME') || '';
-    const id = ledgerNode.getAttribute('ID') || '';
-    
-    // Helper function to get element text content
-    const getElementText = (tagName: string): string => {
-      const element = ledgerNode.querySelector(tagName);
-      return element?.textContent?.trim() || '';
-    };
-
-    const getElementNumber = (tagName: string): number => {
-      const text = getElementText(tagName);
-      return this.parseAmount(text);
-    };
-
-    const getElementBoolean = (tagName: string): boolean => {
-      const text = getElementText(tagName);
-      return text.toLowerCase() === 'yes' || text.toLowerCase() === 'true';
-    };
-
-    return {
-      name,
-      id,
-      parent: getElementText('PARENT'),
-      taxType: getElementText('TAXTYPE'),
-      isBillWiseOn: getElementBoolean('ISBILLWISEON'),
-      isCostCentresOn: getElementBoolean('ISCOSTCENTRESON'),
-      isRevenue: getElementBoolean('ISREVENUE'),
-      isDeemedPositive: getElementBoolean('ISDEEMEDPOSITIVE'),
-      canDelete: getElementBoolean('CANDELETE'),
-      forPayroll: getElementBoolean('FORPAYROLL'),
-      masterId: parseInt(getElementText('MASTERID')) || 0,
-      closingBalance: getElementNumber('CLOSINGBALANCE'),
-      openingBalance: getElementNumber('OPENINGBALANCE'),
-    };
+    return txns.sort((a, b) => a.date.localeCompare(b.date));
   }
 }
