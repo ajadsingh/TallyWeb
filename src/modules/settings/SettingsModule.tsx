@@ -1,10 +1,13 @@
 import React from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, Server, Building2, HelpCircle, ArrowLeft, Phone, Mail, Book, Download, CheckCircle, AlertTriangle, Tag } from 'lucide-react';
+import { Settings, Server, Building2, HelpCircle, ArrowLeft, Phone, Mail, Book, Download, CheckCircle, AlertTriangle, Tag, Users, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import ServerSettings from './components/ServerSettings';
 import CompanySettings from './components/CompanySettings';
 import VoucherTypesSettings from './components/VoucherTypesSettings';
+import UserManagement from './components/UserManagement';
+import RolePermissions from './components/RolePermissions';
 
 interface SettingsOption {
   id: string;
@@ -17,6 +20,7 @@ interface SettingsOption {
 const SettingsModule: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { can } = useAuth();
 
   const settingsOptions: SettingsOption[] = [
     {
@@ -46,7 +50,21 @@ const SettingsModule: React.FC = () => {
       description: 'Map custom Tally voucher type names so purchases & sales data loads correctly',
       icon: <Tag className="h-6 w-6" />,
       path: '/settings/voucher-types'
-    }
+    },
+    ...(can('users.manage') ? [{
+      id: 'users',
+      title: 'User Management',
+      description: 'Create users, assign roles and control application access',
+      icon: <Users className="h-6 w-6" />,
+      path: '/settings/users'
+    }] : []),
+    ...(can('roles.manage') ? [{
+      id: 'roles',
+      title: 'Role Permissions',
+      description: 'Configure role permissions for each application module',
+      icon: <ShieldCheck className="h-6 w-6" />,
+      path: '/settings/roles'
+    }] : []),
   ];
 
   const getCurrentSettingTitle = () => {
@@ -276,6 +294,8 @@ const SettingsModule: React.FC = () => {
           <Route path="company" element={<CompanySettings />} />
           <Route path="help" element={<HelpSupport />} />
           <Route path="voucher-types" element={<VoucherTypesSettings />} />
+          <Route path="users" element={<UserManagement />} />
+          <Route path="roles" element={<RolePermissions />} />
         </Routes>
       </div>
     </motion.div>

@@ -3,17 +3,53 @@ const nodemailer = require('nodemailer');
 const multer = require('multer');
 const cors = require('cors');
 const path = require('path');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const port = 3001;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// ── Security: Only allow requests from the local app (localhost) ──────────
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:4173', 'http://localhost:3000'],
+  methods: ['POST', 'GET'],
+  allowedHeaders: ['Content-Type'],
+}));
 
-// Configure multer for handling file uploads (PDF attachments)
+// ── Security: Rate limiting — max 10 emails per 15 minutes per IP ────────
+const emailLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many email requests. Please wait 15 minutes.' },
+});
+
+app.use(express.json({ limit: '1mb' }));
+
+// ── Security: Sanitize user input before use in HTML ─────────────────────
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+// ── Security: Multer — PDF only, max 10 MB ───────────────────────────────
 const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'));
+    }
+  },
+});
 
 // Email configuration - Replace with your email credentials
 const EMAIL_CONFIG = {
@@ -39,8 +75,8 @@ transporter.verify((error, success) => {
   }
 });
 
-// Email sending endpoint
-app.post('/api/send-email', upload.single('pdf'), async (req, res) => {
+// Email sending endpoint — rate limited
+app.post('/api/send-email', emailLimiter, upload.single('pdf'), async (req, res) => {
   try {
     const { 
       recipientEmail, 
@@ -53,7 +89,7 @@ app.post('/api/send-email', upload.single('pdf'), async (req, res) => {
       companyName 
     } = req.body;
 
-    // Validate required fields
+    // ── Validate required fields ─────────────────────────────────────────
     if (!recipientEmail || !invoiceNumber) {
       return res.status(400).json({ 
         success: false, 
@@ -61,19 +97,39 @@ app.post('/api/send-email', upload.single('pdf'), async (req, res) => {
       });
     }
 
-    // Parse JSON strings if they come as strings
-    const parsedGstDetails = typeof gstDetails === 'string' ? JSON.parse(gstDetails) : gstDetails;
-    const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
+    // ── Validate email format ────────────────────────────────────────────
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipientEmail)) {
+      return res.status(400).json({ success: false, message: 'Invalid recipient email address' });
+    }
 
-    // Create email content
-    const subject = `Invoice ${invoiceNumber} - ₹${amount}`;
+    // ── Sanitize all inputs before use in HTML ───────────────────────────
+    const safeInvoiceNumber = escapeHtml(String(invoiceNumber));
+    const safeCustomerName  = escapeHtml(String(customerName  || ''));
+    const safeAmount        = escapeHtml(String(amount        || ''));
+    const safeDate          = escapeHtml(String(date          || ''));
+    const safeCompanyName   = escapeHtml(String(companyName   || 'Your Company'));
+
+    // ── Safe JSON parse for nested objects ──────────────────────────────
+    let parsedGstDetails = null;
+    let parsedItems = [];
+    try {
+      parsedGstDetails = typeof gstDetails === 'string' ? JSON.parse(gstDetails) : (gstDetails || null);
+    } catch { parsedGstDetails = null; }
+    try {
+      parsedItems = typeof items === 'string' ? JSON.parse(items) : (items || []);
+      if (!Array.isArray(parsedItems)) parsedItems = [];
+    } catch { parsedItems = []; }
+
+    // Create email content — use sanitized values throughout
+    const subject = `Invoice ${safeInvoiceNumber} - ₹${safeAmount}`;
     
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
         <div style="text-align: center; margin-bottom: 30px;">
           <h1 style="color: #2563eb; margin-bottom: 10px;">📧 Invoice Details</h1>
           <div style="background: linear-gradient(135deg, #2563eb, #3b82f6); color: white; padding: 15px; border-radius: 8px;">
-            <h2 style="margin: 0;">Invoice #${invoiceNumber}</h2>
+            <h2 style="margin: 0;">Invoice #${safeInvoiceNumber}</h2>
           </div>
         </div>
 
@@ -82,19 +138,19 @@ app.post('/api/send-email', upload.single('pdf'), async (req, res) => {
           <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="padding: 8px 0; color: #6b7280;"><strong>Invoice Number:</strong></td>
-              <td style="padding: 8px 0; color: #111827;">${invoiceNumber}</td>
+              <td style="padding: 8px 0; color: #111827;">${safeInvoiceNumber}</td>
             </tr>
             <tr>
               <td style="padding: 8px 0; color: #6b7280;"><strong>Date:</strong></td>
-              <td style="padding: 8px 0; color: #111827;">${date}</td>
+              <td style="padding: 8px 0; color: #111827;">${safeDate}</td>
             </tr>
             <tr>
               <td style="padding: 8px 0; color: #6b7280;"><strong>Customer:</strong></td>
-              <td style="padding: 8px 0; color: #111827;">${customerName}</td>
+              <td style="padding: 8px 0; color: #111827;">${safeCustomerName}</td>
             </tr>
             <tr>
               <td style="padding: 8px 0; color: #6b7280;"><strong>Total Amount:</strong></td>
-              <td style="padding: 8px 0; color: #059669; font-weight: bold; font-size: 18px;">₹${amount}</td>
+              <td style="padding: 8px 0; color: #059669; font-weight: bold; font-size: 18px;">₹${safeAmount}</td>
             </tr>
           </table>
         </div>
@@ -105,27 +161,27 @@ app.post('/api/send-email', upload.single('pdf'), async (req, res) => {
           <table style="width: 100%; border-collapse: collapse;">
             ${parsedGstDetails.cgst > 0 ? `
             <tr>
-              <td style="padding: 5px 0; color: #6b7280;">CGST (${parsedGstDetails.cgstRate}%):</td>
-              <td style="padding: 5px 0; color: #111827; text-align: right;">₹${parsedGstDetails.cgst.toFixed(2)}</td>
+              <td style="padding: 5px 0; color: #6b7280;">CGST (${escapeHtml(String(parsedGstDetails.cgstRate))}%):</td>
+              <td style="padding: 5px 0; color: #111827; text-align: right;">₹${Number(parsedGstDetails.cgst).toFixed(2)}</td>
             </tr>` : ''}
             ${parsedGstDetails.sgst > 0 ? `
             <tr>
-              <td style="padding: 5px 0; color: #6b7280;">SGST (${parsedGstDetails.sgstRate}%):</td>
-              <td style="padding: 5px 0; color: #111827; text-align: right;">₹${parsedGstDetails.sgst.toFixed(2)}</td>
+              <td style="padding: 5px 0; color: #6b7280;">SGST (${escapeHtml(String(parsedGstDetails.sgstRate))}%):</td>
+              <td style="padding: 5px 0; color: #111827; text-align: right;">₹${Number(parsedGstDetails.sgst).toFixed(2)}</td>
             </tr>` : ''}
             ${parsedGstDetails.igst > 0 ? `
             <tr>
-              <td style="padding: 5px 0; color: #6b7280;">IGST (${parsedGstDetails.igstRate}%):</td>
-              <td style="padding: 5px 0; color: #111827; text-align: right;">₹${parsedGstDetails.igst.toFixed(2)}</td>
+              <td style="padding: 5px 0; color: #6b7280;">IGST (${escapeHtml(String(parsedGstDetails.igstRate))}%):</td>
+              <td style="padding: 5px 0; color: #111827; text-align: right;">₹${Number(parsedGstDetails.igst).toFixed(2)}</td>
             </tr>` : ''}
             <tr style="border-top: 1px solid #d1d5db;">
               <td style="padding: 8px 0; color: #374151; font-weight: bold;">Total GST:</td>
-              <td style="padding: 8px 0; color: #f59e0b; font-weight: bold; text-align: right;">₹${parsedGstDetails.total.toFixed(2)}</td>
+              <td style="padding: 8px 0; color: #f59e0b; font-weight: bold; text-align: right;">₹${Number(parsedGstDetails.total).toFixed(2)}</td>
             </tr>
           </table>
         </div>` : ''}
 
-        ${parsedItems && parsedItems.length > 0 ? `
+        ${parsedItems.length > 0 ? `
         <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #0ea5e9;">
           <h3 style="color: #0c4a6e; margin-top: 0;">📦 Items</h3>
           <div style="overflow-x: auto;">
@@ -141,10 +197,10 @@ app.post('/api/send-email', upload.single('pdf'), async (req, res) => {
               <tbody>
                 ${parsedItems.map(item => `
                 <tr>
-                  <td style="padding: 8px; border: 1px solid #e5e7eb; color: #111827;">${item.stockItem}</td>
-                  <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: center; color: #111827;">${item.quantity.toFixed(2)} ${item.unit}</td>
-                  <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: right; color: #111827;">₹${item.rate.toFixed(2)}</td>
-                  <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: right; color: #111827; font-weight: bold;">₹${item.amount.toFixed(2)}</td>
+                  <td style="padding: 8px; border: 1px solid #e5e7eb; color: #111827;">${escapeHtml(String(item.stockItem || ''))}</td>
+                  <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: center; color: #111827;">${Number(item.quantity).toFixed(2)} ${escapeHtml(String(item.unit || ''))}</td>
+                  <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: right; color: #111827;">₹${Number(item.rate).toFixed(2)}</td>
+                  <td style="padding: 8px; border: 1px solid #e5e7eb; text-align: right; color: #111827; font-weight: bold;">₹${Number(item.amount).toFixed(2)}</td>
                 </tr>
                 `).join('')}
               </tbody>
@@ -160,7 +216,7 @@ app.post('/api/send-email', upload.single('pdf'), async (req, res) => {
 
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; color: #6b7280;">
           <p style="margin: 5px 0;">Thank you for your business! 🙏</p>
-          <p style="margin: 5px 0; font-size: 14px;">Best regards,<br><strong>${companyName || 'Your Company'}</strong></p>
+          <p style="margin: 5px 0; font-size: 14px;">Best regards,<br><strong>${safeCompanyName}</strong></p>
         </div>
       </div>
     `;
@@ -168,25 +224,25 @@ app.post('/api/send-email', upload.single('pdf'), async (req, res) => {
     const textContent = `
 Invoice Details
 
-Invoice Number: ${invoiceNumber}
-Date: ${date}
-Customer: ${customerName}
-Total Amount: ₹${amount}
+Invoice Number: ${safeInvoiceNumber}
+Date: ${safeDate}
+Customer: ${safeCustomerName}
+Total Amount: ₹${safeAmount}
 
 ${parsedGstDetails ? `GST Breakdown:
-${parsedGstDetails.cgst > 0 ? `CGST (${parsedGstDetails.cgstRate}%): ₹${parsedGstDetails.cgst.toFixed(2)}` : ''}
-${parsedGstDetails.sgst > 0 ? `SGST (${parsedGstDetails.sgstRate}%): ₹${parsedGstDetails.sgst.toFixed(2)}` : ''}
-${parsedGstDetails.igst > 0 ? `IGST (${parsedGstDetails.igstRate}%): ₹${parsedGstDetails.igst.toFixed(2)}` : ''}
-Total GST: ₹${parsedGstDetails.total.toFixed(2)}` : ''}
+${parsedGstDetails.cgst > 0 ? `CGST: ₹${Number(parsedGstDetails.cgst).toFixed(2)}` : ''}
+${parsedGstDetails.sgst > 0 ? `SGST: ₹${Number(parsedGstDetails.sgst).toFixed(2)}` : ''}
+${parsedGstDetails.igst > 0 ? `IGST: ₹${Number(parsedGstDetails.igst).toFixed(2)}` : ''}
+Total GST: ₹${Number(parsedGstDetails.total).toFixed(2)}` : ''}
 
-${parsedItems && parsedItems.length > 0 ? `Items:
-${parsedItems.map(item => `• ${item.stockItem}: ${item.quantity.toFixed(2)} ${item.unit} @ ₹${item.rate.toFixed(2)} = ₹${item.amount.toFixed(2)}`).join('\n')}` : ''}
+${parsedItems.length > 0 ? `Items:
+${parsedItems.map(item => `• ${String(item.stockItem || '')}: ${Number(item.quantity).toFixed(2)} ${String(item.unit || '')} @ ₹${Number(item.rate).toFixed(2)} = ₹${Number(item.amount).toFixed(2)}`).join('\n')}` : ''}
 
 Please find the detailed PDF invoice attached to this email.
 
 Thank you for your business!
 Best regards,
-${companyName || 'Your Company'}
+${safeCompanyName}
     `;
 
     // Email options
@@ -202,7 +258,7 @@ ${companyName || 'Your Company'}
     // Add PDF attachment if provided
     if (req.file) {
       mailOptions.attachments.push({
-        filename: `Invoice_${invoiceNumber}.pdf`,
+        filename: `Invoice_${safeInvoiceNumber}.pdf`,
         content: req.file.buffer,
         contentType: 'application/pdf'
       });
@@ -221,10 +277,10 @@ ${companyName || 'Your Company'}
 
   } catch (error) {
     console.error('❌ Error sending email:', error);
+    // Do NOT expose internal error details to client
     res.status(500).json({ 
       success: false, 
-      message: 'Failed to send email', 
-      error: error.message 
+      message: 'Failed to send email. Please try again.' 
     });
   }
 });

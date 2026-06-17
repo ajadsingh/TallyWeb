@@ -40,14 +40,19 @@ const OutstandingModule: React.FC = () => {
 
   const apiRef = useRef(new OutstandingApiService());
 
+  // Convert YYYY-MM-DD → YYYYMMDD for Tally
+  const toTallyDate = (d: string) => d.replace(/-/g, '');
+
   const fetchData = useCallback(async () => {
     if (!selectedCompany) return;
     setLoading(true);
     setError(null);
     try {
+      const from = dateRange.from ? toTallyDate(dateRange.from) : undefined;
+      const to   = dateRange.to   ? toTallyDate(dateRange.to)   : undefined;
       // Sequential — Tally handles one request at a time
-      const rec = await apiRef.current.getReceivableParties(selectedCompany);
-      const pay = await apiRef.current.getPayableParties(selectedCompany);
+      const rec = await apiRef.current.getReceivableParties(selectedCompany, from, to);
+      const pay = await apiRef.current.getPayableParties(selectedCompany, from, to);
       setReceivables(rec);
       setPayables(pay);
     } catch (err) {
@@ -55,12 +60,12 @@ const OutstandingModule: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedCompany]);
+  }, [selectedCompany, dateRange]);
 
   useEffect(() => {
     setSelectedParty(null);
     fetchData();
-  }, [selectedCompany]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedCompany, dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePartyClick = (party: PartyOutstanding) => {
     setSelectedParty(party);

@@ -139,6 +139,19 @@ Please verify:
     return parser.parseFromString(xmlText, 'text/xml');
   }
 
+  /**
+   * Escape special XML characters to prevent XML injection.
+   * Always use this when embedding user-supplied strings inside XML request bodies.
+   */
+  protected escapeXml(unsafe: string): string {
+    return unsafe
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
   protected parseAmount(amountText: string): number {
     if (!amountText || amountText.trim() === '') {
       return 0;

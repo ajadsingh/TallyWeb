@@ -42,16 +42,24 @@ export interface VoucherDetail {
 export default class OutstandingApiService extends BaseApiService {
 
   /** Fetch Sundry Debtors (customers who owe us money) */
-  async getReceivableParties(company: string): Promise<PartyOutstanding[]> {
-    return this.fetchPartyLedgers(company, 'debtor');
+  async getReceivableParties(company: string, fromDate?: string, toDate?: string): Promise<PartyOutstanding[]> {
+    return this.fetchPartyLedgers(company, 'debtor', fromDate, toDate);
   }
 
   /** Fetch Sundry Creditors (vendors we owe money to) */
-  async getPayableParties(company: string): Promise<PartyOutstanding[]> {
-    return this.fetchPartyLedgers(company, 'creditor');
+  async getPayableParties(company: string, fromDate?: string, toDate?: string): Promise<PartyOutstanding[]> {
+    return this.fetchPartyLedgers(company, 'creditor', fromDate, toDate);
   }
 
-  private async fetchPartyLedgers(company: string, type: 'debtor' | 'creditor'): Promise<PartyOutstanding[]> {
+  private async fetchPartyLedgers(
+    company: string,
+    type: 'debtor' | 'creditor',
+    fromDate?: string,  // YYYYMMDD
+    toDate?: string,    // YYYYMMDD
+  ): Promise<PartyOutstanding[]> {
+    const dateVars = fromDate && toDate
+      ? `<SVFROMDATE TYPE="Date">${fromDate}</SVFROMDATE>\n        <SVTODATE TYPE="Date">${toDate}</SVTODATE>`
+      : '';
     const xml = `<ENVELOPE>
   <HEADER>
     <VERSION>1</VERSION>
@@ -63,6 +71,7 @@ export default class OutstandingApiService extends BaseApiService {
     <DESC>
       <STATICVARIABLES>
         <SVCURRENTCOMPANY>${company}</SVCURRENTCOMPANY>
+        ${dateVars}
       </STATICVARIABLES>
       <TDL>
         <TDLMESSAGE>

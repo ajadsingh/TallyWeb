@@ -14,31 +14,14 @@ import OutstandingModule from './modules/outstanding/OutstandingModule';
 import ExpensesModule from './modules/expenses/ExpensesModule';
 import ReportsModule from './modules/reports/ReportsModule';
 import PaymentsModule from './modules/payments/PaymentsModule';
+import GSTModule from './modules/gst/GSTModule';
 import { DashboardProvider } from './context/DashboardContext';
 import { CompanyProvider } from './context/CompanyContext';
 import CompanySelection from './components/CompanySelection';
+import LoginPage from './components/Login';
+import Unauthorized from './components/Unauthorized';
 import AppConfigService from './services/config/appConfig';
-
-// Placeholder components for unimplemented modules
-const PlaceholderModule: React.FC<{ title: string; description: string }> = ({ title, description }) => (
-  <div className="p-6">
-    <div className="mb-8">
-      <h1 className="text-3xl font-bold text-gray-800">{title}</h1>
-      <p className="text-gray-600 mt-2">{description}</p>
-    </div>
-    <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-200 text-center">
-      <div className="max-w-md mx-auto">
-        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <div className="w-8 h-8 bg-blue-500 rounded-full"></div>
-        </div>
-        <h3 className="text-xl font-semibold text-gray-800 mb-2">Coming Soon</h3>
-        <p className="text-gray-600">
-          This module is under development and will be available in a future update.
-        </p>
-      </div>
-    </div>
-  </div>
-);
+import { useAuth } from './context/AuthContext';
 
 const GlobalDateRangeBar: React.FC = () => {
   const { setDateRange } = useGlobalDateRange();
@@ -58,6 +41,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, loading: authLoading, logout, can } = useAuth();
 
   useEffect(() => {
     // Check if user has already configured server and company
@@ -90,6 +74,7 @@ function App() {
     // Clear all configuration
     const appConfig = AppConfigService.getInstance();
     appConfig.resetConfig();
+    logout();
     
     // Reset component state
     setSelectedCompany(null);
@@ -124,7 +109,7 @@ function App() {
   };
 
   // Show loading state while checking configuration
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -137,42 +122,44 @@ function App() {
 
   return (
     <Routes>
-      {/* Onboarding Route */}
       <Route path="/onboarding" element={<CompanySelection onCompanySelect={handleCompanySelect} />} />
-      
-      {/* Protected App Routes */}
+      <Route path="/login" element={selectedCompany ? <LoginPage /> : <Navigate to="/onboarding" replace />} />
+      <Route path="/unauthorized" element={<Unauthorized />} />
       <Route path="/*" element={
         selectedCompany ? (
-          <CompanyProvider selectedCompany={selectedCompany} serverUrl={serverUrl || ''}>
-            <DashboardProvider selectedCompany={selectedCompany} serverUrl={serverUrl}>
-              <GlobalDateRangeProvider>
-              <div className="min-h-screen bg-gray-50 flex overflow-x-hidden">
-                <Sidebar currentView={getCurrentView()} onViewChange={handleViewChange} onLogout={handleLogout} />
-                <main className="flex-1 min-w-0 overflow-x-hidden transition-all duration-300 ml-0 lg:ml-72 pb-16 lg:pb-0 pt-14 lg:pt-0">
-                  {/* Global date-range filter — one place, all modules react to it */}
-                  <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 overflow-x-auto scrollbar-hide" style={{WebkitOverflowScrolling:'touch'}}>
-                    <GlobalDateRangeBar />
+          user ? (
+            <CompanyProvider selectedCompany={selectedCompany} serverUrl={serverUrl || ''}>
+              <DashboardProvider selectedCompany={selectedCompany} serverUrl={serverUrl}>
+                <GlobalDateRangeProvider>
+                  <div className="min-h-screen bg-gray-50 flex overflow-x-hidden">
+                    <Sidebar currentView={getCurrentView()} onViewChange={handleViewChange} onLogout={handleLogout} />
+                    <main className="flex-1 min-w-0 overflow-x-hidden transition-all duration-300 ml-0 lg:ml-72 pb-16 lg:pb-0 pt-14 lg:pt-0">
+                      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm px-3 sm:px-4 py-1.5 sm:py-2 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+                        <GlobalDateRangeBar />
+                      </div>
+                      <Routes>
+                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                        <Route path="/dashboard" element={can('dashboard.view') ? <Dashboard /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/sales" element={can('sales.view') ? <SalesModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/purchases" element={can('purchases.view') ? <PurchasesModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/payments" element={can('payments.view') ? <PaymentsModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/inventory" element={can('inventory.view') ? <InventoryModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/expenses" element={can('expenses.view') ? <ExpensesModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/reports" element={can('reports.view') ? <ReportsModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/gst" element={can('gst.view') ? <GSTModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/ledger" element={can('ledger.view') ? <LedgerModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/outstanding" element={can('outstanding.view') ? <OutstandingModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/company" element={can('company.view') ? <CompanyModule /> : <Navigate to="/unauthorized" replace />} />
+                        <Route path="/settings/*" element={can('settings.manage') || can('users.manage') || can('roles.manage') ? <SettingsModule /> : <Navigate to="/unauthorized" replace />} />
+                      </Routes>
+                    </main>
                   </div>
-                  <Routes>
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/sales" element={<SalesModule />} />
-                    <Route path="/purchases" element={<PurchasesModule />} />
-                    <Route path="/payments" element={<PaymentsModule />} />
-                    <Route path="/inventory" element={<InventoryModule />} />
-                    <Route path="/expenses" element={<ExpensesModule />} />
-                    <Route path="/reports" element={<ReportsModule />} />
-                    <Route path="/gst" element={<PlaceholderModule title="GST Management" description="Handle GST calculations and filings" />} />
-                    <Route path="/ledger" element={<LedgerModule />} />
-                    <Route path="/outstanding" element={<OutstandingModule />} />
-                    <Route path="/company" element={<CompanyModule />} />
-                    <Route path="/settings/*" element={<SettingsModule />} />
-                  </Routes>
-                </main>
-              </div>
-              </GlobalDateRangeProvider>
-            </DashboardProvider>
-          </CompanyProvider>
+                </GlobalDateRangeProvider>
+              </DashboardProvider>
+            </CompanyProvider>
+          ) : (
+            <Navigate to="/login" replace />
+          )
         ) : (
           <Navigate to="/onboarding" replace />
         )

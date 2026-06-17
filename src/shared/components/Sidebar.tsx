@@ -6,6 +6,7 @@ import {
   Calculator, BookOpen, Settings, Building2, LogOut,
   Wallet, ArrowLeftRight, Menu, X, ChevronRight,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 import AppConfigService from '../../services/config/appConfig';
 
 interface SidebarProps {
@@ -14,21 +15,21 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
-type NavItem = { id: string; label: string; Icon: React.ComponentType<{ className?: string }> };
+type NavItem = { id: string; label: string; Icon: React.ComponentType<{ className?: string }>; permission?: string | string[]; path?: string };
 
 const ALL_NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard',   label: 'Dashboard',   Icon: BarChart3      },
-  { id: 'sales',       label: 'Sales',       Icon: ShoppingCart   },
-  { id: 'purchases',   label: 'Purchases',   Icon: Package        },
-  { id: 'payments',    label: 'Payments',    Icon: ArrowLeftRight },
-  { id: 'outstanding', label: 'Outstanding', Icon: Wallet         },
-  { id: 'inventory',   label: 'Inventory',   Icon: Package        },
-  { id: 'expenses',    label: 'Expenses',    Icon: CreditCard     },
-  { id: 'ledger',      label: 'Ledger',      Icon: BookOpen       },
-  { id: 'reports',     label: 'Reports',     Icon: FileText       },
-  { id: 'gst',         label: 'GST',         Icon: Calculator     },
-  { id: 'company',     label: 'Company',     Icon: Building2      },
-  { id: 'settings',    label: 'Settings',    Icon: Settings       },
+  { id: 'dashboard',   label: 'Dashboard',   Icon: BarChart3,      permission: 'dashboard.view' },
+  { id: 'sales',       label: 'Sales',       Icon: ShoppingCart,   permission: 'sales.view' },
+  { id: 'purchases',   label: 'Purchases',   Icon: Package,        permission: 'purchases.view' },
+  { id: 'payments',    label: 'Payments',    Icon: ArrowLeftRight, permission: 'payments.view' },
+  { id: 'outstanding', label: 'Outstanding', Icon: Wallet,         permission: 'reports.view' },
+  { id: 'inventory',   label: 'Inventory',   Icon: Package,        permission: 'inventory.view' },
+  { id: 'expenses',    label: 'Expenses',    Icon: CreditCard,    permission: 'expenses.view' },
+  { id: 'ledger',      label: 'Ledger',      Icon: BookOpen,       permission: 'ledger.view' },
+  { id: 'reports',     label: 'Reports',     Icon: FileText,       permission: 'reports.view' },
+  { id: 'gst',         label: 'GST',         Icon: Calculator,     permission: 'gst.view' },
+  { id: 'company',     label: 'Company',     Icon: Building2,      permission: 'company.view' },
+  { id: 'settings',    label: 'Settings',    Icon: Settings,       permission: ['settings.manage', 'users.manage', 'roles.manage'] },
 ];
 
 const BOTTOM_NAV: NavItem[] = [
@@ -41,6 +42,22 @@ const BOTTOM_NAV: NavItem[] = [
 export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onLogout }) => {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { can } = useAuth();
+
+  const navItems = ALL_NAV_ITEMS.filter((item) => {
+    if (!item.permission) return true;
+    if (Array.isArray(item.permission)) {
+      return item.permission.some((permission) => can(permission));
+    }
+    return can(item.permission);
+  });
+  const bottomNavItems = BOTTOM_NAV.filter((item) => {
+    if (!item.permission) return true;
+    if (Array.isArray(item.permission)) {
+      return item.permission.some((permission) => can(permission));
+    }
+    return can(item.permission);
+  });
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
@@ -99,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
       <div className="h-px bg-gray-200 flex-shrink-0" />
 
       <nav className="flex-1 overflow-y-auto py-2">
-        {ALL_NAV_ITEMS.map(({ id, label, Icon }) => {
+        {navItems.map(({ id, label, Icon }) => {
           const active = currentView === id;
           return (
             <button
@@ -196,7 +213,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, onL
         className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 flex shadow-[0_-1px_6px_rgba(0,0,0,0.08)]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        {BOTTOM_NAV.map(({ id, label, Icon }) => {
+        {bottomNavItems.map(({ id, label, Icon }) => {
           const active = currentView === id;
           return (
             <button
